@@ -1,9 +1,11 @@
 import os
+import json
 import time
 import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import jwt
+from livekit import api as lk_api
 
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -28,15 +30,32 @@ class JoinTokenRequest(BaseModel):
     room: str
     identity: str | None = None
     name: str | None = None
+    job: dict | None = None
+    resume: str | None = None
 
 
 @router.post("/join-token")
-def create_join_token(body: JoinTokenRequest):
+async def create_join_token(body: JoinTokenRequest):
     api_key = os.getenv("LIVEKIT_API_KEY") or os.getenv("LiveKit_API_KEY")
     api_secret = os.getenv("LIVEKIT_API_SECRET") or os.getenv("LiveKit_API_SECRET")
     livekit_url = os.getenv("LIVEKIT_URL") or os.getenv("LiveKit_URL")
     if not api_key or not api_secret or not livekit_url:
         raise HTTPException(status_code=500, detail="LiveKit environment not configured")
+
+    # Pre-create the room with the job/resume in its metadata so the auto-dispatched
+    # interview agent can personalize the session (it reads ctx.room.metadata on join).
+    metadata = json.dumps({"job": body.job or {}, "resume": body.resume or ""})
+    try:
+        async with lk_api.LiveKitAPI(livekit_url, api_key, api_secret) as lk:
+            await lk.room.create_room(
+                lk_api.CreateRoomRequest(
+                    name=body.room,
+                    metadata=metadata,
+                    empty_timeout=300,
+                )
+            )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Failed to create interview room: {exc}")
 
     identity = body.identity or str(uuid.uuid4())
     now = int(time.time())

@@ -146,7 +146,7 @@ def _llm_extract_job_from_text(text: str) -> ParsedJob:
     }
 
     completion = client.chat.completions.create(
-        model=os.environ.get("CEREBRAS_MODEL", "llama3.3-70b"),
+        model=os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b"),
         messages=[
             {"role": "system", "content": f"You are a link summarizing agent. Extract job information from: {text}"},
             {"role": "user", "content": "Summarize the relevant job information in the required JSON schema."},

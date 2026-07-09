@@ -43,7 +43,7 @@ async def entrypoint(
         vad=silero.VAD.load(),
         stt=deepgram.STT(model="nova-3"),
         llm=openai.LLM.with_cerebras(
-            model=os.getenv("CEREBRAS_MODEL", "llama3.3-70b"),
+            model=os.getenv("CEREBRAS_MODEL", "gpt-oss-120b"),
             temperature=float(os.getenv("AGENT_TEMPERATURE", "0.7")),
         ),
         tts=deepgram.TTS(model=os.getenv("DEEPGRAM_TTS_MODEL", "aura-2-thalia-en")),

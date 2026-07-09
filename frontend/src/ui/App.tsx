@@ -82,13 +82,13 @@ export const App: React.FC = () => {
     }
   }
 
-  async function uploadResume() {
-    if (!resumeFile) return
+  async function uploadResume(file: File | null = resumeFile) {
+    if (!file) return
     setLoading(true)
     setError('')
     try {
       const form = new FormData()
-      form.append('file', resumeFile)
+      form.append('file', file)
       const res = await fetch(`${API_BASE}/utils/parse-pdf-upload`, {
         method: 'POST',
         body: form
@@ -117,10 +117,12 @@ export const App: React.FC = () => {
       const tokenRes = await fetch(`${API_BASE}/agent/join-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          room: roomName, 
+        body: JSON.stringify({
+          room: roomName,
           name: 'Candidate',
-          identity: `user-${Date.now()}`
+          identity: `user-${Date.now()}`,
+          job,
+          resume
         })
       })
       
@@ -166,11 +168,10 @@ export const App: React.FC = () => {
       
       setRoom(newRoom)
       setActiveStep('interview')
-      
-      // TODO: Trigger agent to join this specific room
-      // This would require running the agent worker or having a backend endpoint
-      // that spawns an agent for this specific room with job/resume context
-      
+
+      // The agent worker uses automatic dispatch: it joins this room on its own
+      // and reads the job/resume we stored in the room metadata (via /agent/join-token).
+
     } catch (err: any) {
       setError(err.message)
       console.error('Failed to start interview:', err)
@@ -281,6 +282,8 @@ export const App: React.FC = () => {
                       const file = e.target.files?.[0]
                       if (file) {
                         setResumeFile(file)
+                        setResume('')
+                        uploadResume(file)
                       }
                     }}
                   />
@@ -291,14 +294,15 @@ export const App: React.FC = () => {
                     {resumeFile ? `📄 ${resumeFile.name}` : '📁 Choose PDF file'}
                   </label>
                 </div>
-                {resumeFile && (
-                  <button 
-                    className="btn btn-primary btn-full"
-                    onClick={uploadResume}
-                    disabled={loading}
-                  >
-                    {loading ? <span className="loading-spinner" /> : '📤'} Upload & Parse
-                  </button>
+                {resumeFile && loading && !resume && (
+                  <div className="status-badge status-ready">
+                    <span className="loading-spinner" /> Parsing your resume…
+                  </div>
+                )}
+                {resume && (
+                  <div className="status-badge status-connected">
+                    ✅ Resume parsed
+                  </div>
                 )}
               </div>
 
@@ -317,17 +321,33 @@ export const App: React.FC = () => {
                 </div>
               )}
 
-              {canStartInterview && (
-                <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-                  <button 
-                    className="btn btn-success"
-                    onClick={startInterview}
-                    style={{ fontSize: '1.2rem', padding: '1rem 2rem' }}
-                  >
-                    🚀 Start Mock Interview
-                  </button>
+              <div className="ready-panel">
+                <div className="ready-checklist">
+                  <span className={job ? 'ready-item done' : 'ready-item'}>
+                    {job ? '✅' : '⬜'} Job details
+                  </span>
+                  <span className={resume ? 'ready-item done' : 'ready-item'}>
+                    {resume ? '✅' : '⬜'} Resume
+                  </span>
                 </div>
-              )}
+                <button
+                  className="btn btn-success btn-full"
+                  onClick={startInterview}
+                  disabled={!canStartInterview}
+                  style={{ fontSize: '1.15rem', padding: '1rem 2rem' }}
+                >
+                  {loading && job && resume ? <span className="loading-spinner" /> : '🚀'} Start Mock Interview
+                </button>
+                {!canStartInterview && !loading && (
+                  <p className="ready-hint">
+                    {!job && !resume
+                      ? 'Add a job description and upload your resume to begin.'
+                      : !job
+                        ? 'Add a job description above to continue.'
+                        : 'Upload your resume above to continue.'}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         ) : (

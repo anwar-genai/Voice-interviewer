@@ -59,7 +59,7 @@ async def generate_interview_feedback(request: GenerateFeedbackRequest):
         """
         
         completion = client.chat.completions.create(
-            model=os.getenv("CEREBRAS_MODEL", "llama3.3-70b"),
+            model=os.getenv("CEREBRAS_MODEL", "gpt-oss-120b"),
             messages=[
                 {"role": "system", "content": "You are an expert interview coach providing constructive feedback."},
                 {"role": "user", "content": feedback_prompt}

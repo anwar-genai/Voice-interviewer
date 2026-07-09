@@ -10,6 +10,11 @@ the agent via room metadata. Missing everything below the "runs on my machine" l
 auth, a database, persisted history, wired feedback/analytics UI, tests, evals,
 observability, CI/CD, and deployment config.
 
+> **Cross-cutting concerns** — Security, Privacy, Safety/Responsible-AI, Evals, and
+> Observability span every phase. This roadmap schedules them *by phase*;
+> [`CROSS_CUTTING.md`](CROSS_CUTTING.md) tracks them *by concern* (the end-to-end
+> posture for each). Deployment specifics live in [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
 ---
 
 ## Phase 0 — Cleanup & consolidation *(~1–2 days, low risk)*

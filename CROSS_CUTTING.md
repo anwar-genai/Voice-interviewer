@@ -13,13 +13,13 @@ most of it is ❌ today — that's expected and honest.
 
 ## At a glance
 
-| Concern | Today | Primary phase | Also see |
+| Concern | Today | Phases | Also see |
 |---|---|---|---|
-| 1. Security | ❌ | Phase 1 | `DEPLOYMENT.md` (secrets, network) |
-| 2. Privacy & Data Protection | ❌ | Phase 1–2, 7 | `DEPLOYMENT.md` (residency) |
-| 3. Safety & Responsible AI | ❌ | Phase 1, 3, 4 | `ROADMAP.md` (evals) |
-| 4. Evals & Quality | ❌ | Phase 4 | `ROADMAP.md` §4b |
-| 5. Observability | ❌ | Phase 4 | `ROADMAP.md` §4c |
+| 1. Security | ❌ | P1 (app), P6 (infra/CI) | `DEPLOYMENT.md` (secrets, network) |
+| 2. Privacy & Data Protection | ❌ | P1 (consent), P2 (retention/deletion), P4 (redaction ○), P5 (UI), P7 (policy) | `DEPLOYMENT.md` (residency) |
+| 3. Safety & Responsible AI | ❌ | P1 (input isolation), P3 (output guardrails), P4 (fairness evals), P5 (transparency), P7 (policy) | `ROADMAP.md` (evals) |
+| 4. Evals & Quality | ❌ | P0 (seed ○), P3 (feedback), P4 (full harness) | `ROADMAP.md` Phase 4 |
+| 5. Observability | ❌ | P0 (metrics hook), P4 (deepen), P6 (platform) | `ROADMAP.md` Phase 4 |
 
 ---
 
@@ -40,7 +40,8 @@ API keys sit in a local `.env`.
 - Secrets in a platform vault, not `.env`; rotate the current local keys.
 - Dependency scanning (Dependabot / `pip-audit` / `npm audit`) in CI.
 
-**Delivered by:** Phase 1 (see `ROADMAP.md`). Infra/secrets: `DEPLOYMENT.md`.
+**Delivered by:** Phase 1 (app-layer auth, tokens, CORS, rate limiting, input limits),
+Phase 6 (edge hardening, dependency scanning in CI). Infra/secrets: `DEPLOYMENT.md`.
 
 ## 2. Privacy & Data Protection
 
@@ -62,8 +63,9 @@ an in-memory dict.
 - **PII redaction** before data enters logs, traces, or eval datasets (see §5).
 - **Subprocessor list & DPA** — Cerebras, Deepgram, LiveKit all process user data.
 
-**Delivered by:** Phase 1 (consent/deletion plumbing), Phase 2 (retention in schema),
-Phase 7 (policy, DPAs, residency).
+**Delivered by:** Phase 1 (consent capture), Phase 2 (retention TTL + deletion/erasure
+in the schema), Phase 4 (PII redaction before the o11y layer), Phase 5 (consent +
+deletion UI), Phase 7 (policy, DPAs, residency).
 
 ## 3. Safety & Responsible AI
 
@@ -90,9 +92,10 @@ into prompts; no guardrails; no fairness consideration; no moderation.
   strengths/weaknesses (overlaps §4).
 - **Transparency** — disclose that the interviewer and feedback are AI-generated.
 
-**Delivered by:** Phase 1 (input isolation/limits), Phase 3 (guardrails in the wired
-feedback flow), Phase 4 (fairness + groundedness evals). Fairness/transparency policy
-lands with Phase 7 compliance.
+**Delivered by:** Phase 1 (prompt-injection isolation of untrusted input), Phase 3
+(output guardrails + groundedness in the wired feedback flow), Phase 4 (bias/fairness
+evals), Phase 5 (AI-generated transparency in the UI), Phase 7 (responsible-AI policy,
+intended-use docs, bias audits).
 
 ## 4. Evals & Quality
 
@@ -106,7 +109,9 @@ for the interviewer; calibration + groundedness evals for feedback; voice SLOs (
 `ttft`/`ttfb`, turn-detection). Prompts are code — gate CI on evals when prompts change.
 A strong, *different* model as judge. Prod→eval loop feeds from §5.
 
-**Delivered by:** Phase 4 §4b (full detail in `ROADMAP.md`).
+**Delivered by:** Phase 0 (seed the `evals/` harness once `app/llm/` is pure), Phase 3
+(feedback calibration + groundedness), Phase 4 (full harness + CI gating). Full detail
+in `ROADMAP.md` Phase 4.
 
 ## 5. Observability
 
@@ -120,7 +125,9 @@ A strong, *different* model as judge. Prod→eval loop feeds from §5.
 `interview_id`; Sentry for errors; provider-error events (`LLMError`/`STTError`/`TTSError`);
 SLOs + alerting. **PII redaction before anything enters this layer** (ties to §2/§3).
 
-**Delivered by:** Phase 4 §4c (full detail in `ROADMAP.md`).
+**Delivered by:** Phase 0 (the `MetricsCollectedEvent` hook — a free early win),
+Phase 4 (tracing, Sentry, SLOs, alerting), Phase 6 (platform exporters/dashboards).
+Full detail in `ROADMAP.md` Phase 4.
 
 ---
 

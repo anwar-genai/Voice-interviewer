@@ -1,12 +1,18 @@
+import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..core.auth import require_user
 from ..core.config import MissingConfigError
+from ..core.ratelimit import rate_limit
 from ..llm import InterviewFeedback, InvalidInputError, LLMError, generate_feedback
 
-router = APIRouter(prefix="/feedback", tags=["feedback"])
+logger = logging.getLogger("interview.feedback")
+
+# Every feedback endpoint requires an authenticated user.
+router = APIRouter(prefix="/feedback", tags=["feedback"], dependencies=[Depends(require_user)])
 
 
 class GenerateFeedbackRequest(BaseModel):
@@ -16,7 +22,7 @@ class GenerateFeedbackRequest(BaseModel):
 
 
 @router.post("/generate", response_model=InterviewFeedback)
-def generate_interview_feedback(request: GenerateFeedbackRequest):
+def generate_interview_feedback(request: GenerateFeedbackRequest, _: str = Depends(rate_limit)):
     """Score a completed interview transcript against the feedback rubric."""
     try:
         return generate_feedback(
@@ -26,10 +32,12 @@ def generate_interview_feedback(request: GenerateFeedbackRequest):
         )
     except InvalidInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except MissingConfigError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-    except LLMError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    except MissingConfigError:
+        logger.error("LLM not configured")
+        raise HTTPException(status_code=500, detail="Feedback service is not configured")
+    except LLMError:
+        logger.exception("Feedback generation failed")
+        raise HTTPException(status_code=502, detail="Feedback service failed")
 
 
 class InterviewMetrics(BaseModel):

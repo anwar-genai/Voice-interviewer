@@ -75,11 +75,20 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 CEREBRAS_API_KEY=your_cerebras_key
 DEEPGRAM_API_KEY=your_deepgram_key
 
+# Auth (Supabase) — every API endpoint requires a signed-in user.
+# Settings -> API -> JWT Secret. For local dev without Supabase, set AUTH_ENABLED=false.
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_JWT_SECRET=your_supabase_jwt_secret
+AUTH_ENABLED=true
+
 # Optional
 CEREBRAS_MODEL=gpt-oss-120b
 AGENT_TEMPERATURE=0.7
 DEEPGRAM_TTS_MODEL=aura-asteria-en
 ```
+
+The frontend needs `frontend/.env` with `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY` (see `frontend/.env.example`).
 
 #### 3. Start Services
 

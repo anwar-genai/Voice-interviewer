@@ -39,6 +39,25 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Auth (Supabase) ---------------------------------------------------
+    # The backend verifies Supabase-issued JWTs; Supabase owns the user store.
+    # New projects sign tokens with asymmetric keys (ES256/RS256) verified via
+    # the project's JWKS endpoint -> needs supabase_url. Older projects sign
+    # HS256 with the shared secret -> needs supabase_jwt_secret. Either works.
+    supabase_url: str | None = None
+    supabase_jwt_secret: str | None = None
+    # Fail closed. Set false ONLY for local dev / tests with no Supabase project;
+    # a warning is logged at startup when it is off.
+    auth_enabled: bool = True
+
+    # --- Request limits (also bound untrusted input into prompts) ----------
+    max_pdf_bytes: int = 10 * 1024 * 1024  # 10 MB
+    max_job_text_chars: int = 50_000
+    max_resume_chars: int = 50_000
+
+    # --- Rate limiting (in-process; see app/core/ratelimit.py) -------------
+    rate_limit_per_minute: int = 20
+
     # --- LiveKit -----------------------------------------------------------
     livekit_url: str | None = None
     livekit_api_key: str | None = None
@@ -62,9 +81,9 @@ class Settings(BaseSettings):
     agent_temperature: float = 0.7
 
     # --- API ---------------------------------------------------------------
-    # Comma-separated in the environment: "http://localhost:5173,https://app.example.com"
-    # Phase 1 replaces the "*" default with a real allowlist.
-    cors_origins: str = "*"
+    # Comma-separated in the environment: "http://localhost:5173,https://app.example.com".
+    # Explicit allowlist, never "*" — the API is authenticated and CORS is enforced.
+    cors_origins: str = "http://localhost:5173"
     log_level: str = "INFO"
 
     # --- Cost telemetry ----------------------------------------------------
@@ -108,6 +127,16 @@ class Settings(BaseSettings):
         if missing:
             raise MissingConfigError(f"LiveKit is not configured: missing {', '.join(missing)}")
         return self.livekit_url, self.livekit_api_key, self.livekit_api_secret  # type: ignore[return-value]
+
+    def require_supabase_jwt_secret(self) -> str:
+        if not self.supabase_jwt_secret:
+            raise MissingConfigError("Token is HS256 but SUPABASE_JWT_SECRET is not set")
+        return self.supabase_jwt_secret
+
+    def require_supabase_url(self) -> str:
+        if not self.supabase_url:
+            raise MissingConfigError("Token uses signing keys but SUPABASE_URL is not set")
+        return self.supabase_url
 
     def require_cerebras_api_key(self) -> str:
         if not self.cerebras_api_key:

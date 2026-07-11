@@ -1,10 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-import json
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+from ..core.auth import require_user
+
+# Analytics is authenticated now; Phase 2 replaces the in-memory store with a DB
+# and scopes sessions to the owning user.
+router = APIRouter(prefix="/analytics", tags=["analytics"], dependencies=[Depends(require_user)])
 
 
 class InterviewSession(BaseModel):

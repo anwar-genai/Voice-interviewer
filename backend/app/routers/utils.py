@@ -1,15 +1,20 @@
 import io
+import logging
 
 import pdfplumber
 import requests
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, HttpUrl
 
 from ..core.config import MissingConfigError, get_settings
+from ..core.ratelimit import rate_limit
 from ..llm import InvalidInputError, LLMError, ParsedJob, ParsedResume, extract_job
 
-router = APIRouter(prefix="/utils", tags=["utils"])
+logger = logging.getLogger("interview.utils")
+
+# rate_limit also authenticates, so every /utils endpoint is protected + throttled.
+router = APIRouter(prefix="/utils", tags=["utils"], dependencies=[Depends(rate_limit)])
 
 
 class ParseLinkRequest(BaseModel):
@@ -20,23 +25,46 @@ class ParseJobTextRequest(BaseModel):
     text: str
 
 
-def _fetch_page_text(url: str) -> str:
-    """Fetch a URL and reduce it to visible text."""
+def _fetch_bytes_capped(url: str, limit: int, *, expect_pdf: bool = False) -> tuple[bytes, str]:
+    """Fetch a URL, refusing bodies larger than ``limit``. Returns (bytes, content_type)."""
     settings = get_settings()
     try:
-        response = requests.get(
+        with requests.get(
             url,
             timeout=settings.fetch_timeout_seconds,
             headers={"User-Agent": settings.fetch_user_agent},
-        )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {exc}")
+            stream=True,
+        ) as response:
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            declared = response.headers.get("content-length")
+            if declared and int(declared) > limit:
+                raise HTTPException(status_code=413, detail="Remote file is too large")
+            if expect_pdf and "pdf" not in content_type:
+                raise HTTPException(status_code=400, detail="URL does not point to a PDF")
 
-    soup = BeautifulSoup(response.text, "html.parser")
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                total += len(chunk)
+                if total > limit:
+                    raise HTTPException(status_code=413, detail="Remote file is too large")
+                chunks.append(chunk)
+            return b"".join(chunks), content_type
+    except requests.RequestException:
+        logger.warning("Failed to fetch %s", url, exc_info=True)
+        raise HTTPException(status_code=400, detail="Could not fetch the URL")
+
+
+def _fetch_page_text(url: str) -> str:
+    """Fetch a URL and reduce it to visible text, bounded by the JD length limit."""
+    limit = get_settings().max_job_text_chars
+    content, _ = _fetch_bytes_capped(url, limit * 4)  # markup is larger than its text
+    soup = BeautifulSoup(content, "html.parser")
     lines = (line.strip() for line in soup.get_text("\n").splitlines())
     chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    return "\n".join(chunk for chunk in chunks if chunk)
+    text = "\n".join(chunk for chunk in chunks if chunk)
+    return text[:limit]
 
 
 def _extract_pdf_text(content: bytes) -> str:
@@ -51,15 +79,19 @@ def _extract_job_or_http_error(posting_text: str) -> ParsedJob:
         return extract_job(posting_text)
     except InvalidInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except MissingConfigError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-    except LLMError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    except MissingConfigError:
+        logger.error("LLM not configured")
+        raise HTTPException(status_code=500, detail="Extraction service is not configured")
+    except LLMError:
+        logger.exception("Job extraction failed")
+        raise HTTPException(status_code=502, detail="Extraction service failed")
 
 
 @router.post("/parse-job-text-llm", response_model=ParsedJob)
 def parse_job_text_llm(body: ParseJobTextRequest):
     """Extract structured job fields from a pasted job description."""
+    if len(body.text) > get_settings().max_job_text_chars:
+        raise HTTPException(status_code=413, detail="Job description is too long")
     return _extract_job_or_http_error(body.text)
 
 
@@ -81,34 +113,35 @@ def parse_link_llm(body: ParseLinkRequest):
 @router.post("/parse-pdf", response_model=ParsedResume)
 def parse_pdf(body: ParseLinkRequest):
     """Extract text from a PDF resume hosted at a URL."""
-    try:
-        response = requests.get(str(body.url), timeout=get_settings().fetch_timeout_seconds)
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch PDF: {exc}")
-
-    if "pdf" not in response.headers.get("content-type", ""):
-        raise HTTPException(status_code=400, detail="URL does not point to a PDF")
+    settings = get_settings()
+    content, _ = _fetch_bytes_capped(str(body.url), settings.max_pdf_bytes, expect_pdf=True)
 
     try:
-        text = _extract_pdf_text(response.content)
-    except Exception as exc:  # noqa: BLE001 - pdfplumber raises many types
-        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {exc}")
+        text = _extract_pdf_text(content)
+    except Exception:  # noqa: BLE001 - pdfplumber raises many types
+        logger.warning("Failed to parse PDF from URL", exc_info=True)
+        raise HTTPException(status_code=400, detail="Could not parse the PDF")
 
-    return ParsedResume(text=text)
+    return ParsedResume(text=text[: settings.max_resume_chars])
 
 
 @router.post("/parse-pdf-upload", response_model=ParsedResume)
-def parse_pdf_upload(file: UploadFile = File(...)):
+async def parse_pdf_upload(file: UploadFile = File(...)):
     """Extract text from an uploaded PDF resume."""
-    if not (file.filename or "").lower().endswith(".pdf"):
+    settings = get_settings()
+    if not (file.filename or "").lower().endswith(".pdf") or "pdf" not in (file.content_type or ""):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-    try:
-        text = _extract_pdf_text(file.file.read())
-    except Exception as exc:  # noqa: BLE001 - pdfplumber raises many types
-        raise HTTPException(status_code=400, detail=f"Failed to parse uploaded PDF: {exc}")
-    finally:
-        file.file.close()
+    # Read at most one byte past the limit so we can detect (and reject) oversize files.
+    content = await file.read(settings.max_pdf_bytes + 1)
+    await file.close()
+    if len(content) > settings.max_pdf_bytes:
+        raise HTTPException(status_code=413, detail="PDF is too large")
 
-    return ParsedResume(text=text)
+    try:
+        text = _extract_pdf_text(content)
+    except Exception:  # noqa: BLE001 - pdfplumber raises many types
+        logger.warning("Failed to parse uploaded PDF", exc_info=True)
+        raise HTTPException(status_code=400, detail="Could not parse the uploaded PDF")
+
+    return ParsedResume(text=text[: settings.max_resume_chars])

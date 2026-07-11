@@ -1,10 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Room, RoomEvent, Track, RemoteTrack, RemoteParticipant, LocalParticipant } from 'livekit-client'
+import { Room, RoomEvent, Track, RemoteTrack, RemoteParticipant } from 'livekit-client'
+import type { Session } from '@supabase/supabase-js'
+import { supabase, authedFetch } from '../lib/supabase'
+import { Login } from './Login'
 import './App.css'
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
-
 export const App: React.FC = () => {
+  const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setAuthReady(true)
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  if (!authReady) return null
+  if (!session) return <Login />
+  return <InterviewApp onSignOut={() => supabase.auth.signOut()} />
+}
+
+const InterviewApp: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
   // Input states
   const [jobUrl, setJobUrl] = useState('')
   const [jobText, setJobText] = useState('')
@@ -24,6 +43,7 @@ export const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [consent, setConsent] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   // Cleanup on unmount
@@ -40,7 +60,7 @@ export const App: React.FC = () => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/utils/parse-link-llm`, {
+      const res = await authedFetch('/utils/parse-link-llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: jobUrl })
@@ -67,7 +87,7 @@ export const App: React.FC = () => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/utils/parse-job-text-llm`, {
+      const res = await authedFetch('/utils/parse-job-text-llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: jobText })
@@ -89,7 +109,7 @@ export const App: React.FC = () => {
     try {
       const form = new FormData()
       form.append('file', file)
-      const res = await fetch(`${API_BASE}/utils/parse-pdf-upload`, {
+      const res = await authedFetch('/utils/parse-pdf-upload', {
         method: 'POST',
         body: form
       })
@@ -104,29 +124,20 @@ export const App: React.FC = () => {
   }
 
   async function startInterview() {
-    if (!job || !resume) return
-    
+    if (!job || !resume || !consent) return
+
     setLoading(true)
     setError('')
-    
+
     try {
-      // Create a unique room name
-      const roomName = `interview-${Date.now()}`
-      
-      // Get join token
-      const tokenRes = await fetch(`${API_BASE}/agent/join-token`, {
+      // Room and identity are derived server-side from the authenticated user.
+      const tokenRes = await authedFetch('/agent/join-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          room: roomName,
-          name: 'Candidate',
-          identity: `user-${Date.now()}`,
-          job,
-          resume
-        })
+        body: JSON.stringify({ job, resume, consent })
       })
-      
-      if (!tokenRes.ok) throw new Error('Failed to get join token')
+
+      if (!tokenRes.ok) throw new Error('Failed to start interview')
       const { url, token } = await tokenRes.json()
       
       // Connect to LiveKit room
@@ -196,13 +207,16 @@ export const App: React.FC = () => {
     }
   }
 
-  const canStartInterview = job && resume && !loading
+  const canStartInterview = job && resume && consent && !loading
 
   return (
     <div className="app-container">
       <header className="app-header">
         <h1 className="app-title">🎤 AI Interview Coach</h1>
         <p className="app-subtitle">Practice your interview skills with an AI-powered mock interviewer</p>
+        <button className="btn sign-out" onClick={onSignOut}>
+          Sign out
+        </button>
       </header>
 
       <main className="main-content">
@@ -330,6 +344,16 @@ export const App: React.FC = () => {
                     {resume ? '✅' : '⬜'} Resume
                   </span>
                 </div>
+                <label
+                  className="ready-hint"
+                  style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', cursor: 'pointer', marginBottom: '0.75rem' }}
+                >
+                  <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+                  <span>
+                    I consent to voice recording and resume processing for this AI mock interview.
+                    The interviewer and feedback are AI-generated.
+                  </span>
+                </label>
                 <button
                   className="btn btn-success btn-full"
                   onClick={startInterview}
@@ -344,7 +368,9 @@ export const App: React.FC = () => {
                       ? 'Add a job description and upload your resume to begin.'
                       : !job
                         ? 'Add a job description above to continue.'
-                        : 'Upload your resume above to continue.'}
+                        : !resume
+                          ? 'Upload your resume above to continue.'
+                          : 'Check the consent box above to begin.'}
                   </p>
                 )}
               </div>

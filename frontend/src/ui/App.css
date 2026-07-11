@@ -14,6 +14,28 @@ body {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
+  position: relative;
+}
+
+/* Sign out sits in the top-right corner, translucent so it reads on the gradient. */
+.sign-out {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  width: auto;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.sign-out:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* Centered card for the sign-in / sign-up form. */
+.auth-card {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 2.5rem;
 }
 
 .app-header {

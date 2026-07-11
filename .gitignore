@@ -11,6 +11,10 @@ frontend/.env
 frontend/.env.*
 frontend/.env.local
 
+# ...but keep the committed example templates
+!.env.example
+!frontend/.env.example
+
 # Python
 __pycache__/
 *.py[cod]

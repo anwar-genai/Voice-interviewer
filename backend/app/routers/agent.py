@@ -1,69 +1,87 @@
 import json
+import logging
 import time
 import uuid
+from typing import Any
 
 import jwt
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from livekit import api as lk_api
 from pydantic import BaseModel
 
 from ..core.config import MissingConfigError, get_settings
+from ..core.ratelimit import rate_limit
+
+logger = logging.getLogger("interview.agent")
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 class JoinTokenRequest(BaseModel):
-    room: str
-    identity: str | None = None
-    name: str | None = None
-    job: dict | None = None
+    # room and identity are derived server-side from the authenticated user and
+    # are deliberately NOT accepted from the client.
+    job: dict[str, Any] | None = None
     resume: str | None = None
+    # The candidate must consent to voice recording + resume processing to start.
+    consent: bool = False
 
 
 @router.post("/join-token")
-async def create_join_token(body: JoinTokenRequest):
-    """Create the interview room and mint a LiveKit join token for it.
+async def create_join_token(body: JoinTokenRequest, user_id: str = Depends(rate_limit)):
+    """Create the interview room and mint a LiveKit join token for the caller.
 
-    Phase 1 will derive `room` and `identity` server-side from the authenticated
-    user instead of trusting the client.
+    Room and identity are derived from the authenticated user, never from the
+    client. Phase 2 will persist the consent record in the schema.
     """
+    if not body.consent:
+        raise HTTPException(
+            status_code=400,
+            detail="Consent to voice recording and resume processing is required to start an interview.",
+        )
+
     settings = get_settings()
     try:
         livekit_url, api_key, api_secret = settings.require_livekit()
-    except MissingConfigError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    except MissingConfigError:
+        logger.error("LiveKit not configured")
+        raise HTTPException(status_code=500, detail="Interview service is not configured")
+
+    # Server owns room + identity; the client cannot pick either.
+    room = f"interview-{uuid.uuid4()}"
+    identity = user_id
+
+    resume = (body.resume or "")[: settings.max_resume_chars]
+    logger.info("consent_recorded user=%s scopes=voice,resume ts=%d", user_id, int(time.time()))
 
     # Pre-create the room with the job/resume in its metadata so the auto-dispatched
     # interview agent can personalize the session (it reads ctx.room.metadata on join).
-    metadata = json.dumps({"job": body.job or {}, "resume": body.resume or ""})
+    metadata = json.dumps({"job": body.job or {}, "resume": resume, "user_id": user_id})
     try:
         async with lk_api.LiveKitAPI(livekit_url, api_key, api_secret) as lk:
             await lk.room.create_room(
                 lk_api.CreateRoomRequest(
-                    name=body.room,
+                    name=room,
                     metadata=metadata,
                     empty_timeout=settings.room_empty_timeout_seconds,
                 )
             )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Failed to create interview room: {exc}")
+    except Exception:
+        logger.exception("Failed to create interview room for user=%s", user_id)
+        raise HTTPException(status_code=502, detail="Failed to create interview room")
 
-    identity = body.identity or str(uuid.uuid4())
     now = int(time.time())
-
     payload = {
         "iss": api_key,
         "exp": now + settings.join_token_ttl_seconds,
         "nbf": now - 5,
         "sub": identity,
-        "name": body.name or identity,
+        "name": identity,
         "video": {
-            "room": body.room,
+            "room": room,
             "roomJoin": True,
             "canPublish": True,
             "canSubscribe": True,
         },
     }
-
     token = jwt.encode(payload, api_secret, algorithm="HS256")
-    return {"url": livekit_url, "token": token, "identity": identity}
+    return {"url": livekit_url, "token": token, "room": room, "identity": identity}

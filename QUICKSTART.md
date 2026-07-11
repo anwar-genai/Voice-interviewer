@@ -33,8 +33,12 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 CEREBRAS_API_KEY=your_cerebras_key
 DEEPGRAM_API_KEY=your_deepgram_key
 
+# Auth: for a quick local spin without Supabase, disable auth.
+# For real auth, set the two Supabase values instead (see backend/env.example).
+AUTH_ENABLED=false
+
 # Optional
-CEREBRAS_MODEL=llama3.3-70b
+CEREBRAS_MODEL=gpt-oss-120b
 AGENT_TEMPERATURE=0.7
 ```
 

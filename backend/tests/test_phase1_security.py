@@ -20,6 +20,9 @@ os.environ.update(
     SUPABASE_JWT_SECRET=SECRET,
     SUPABASE_URL="https://example.supabase.co",
     RATE_LIMIT_PER_MINUTE="3",
+    # join-token now depends on get_db; a throwaway SQLite URL keeps this suite
+    # DB-free (the consent-rejection path never touches the session).
+    DATABASE_URL="sqlite://",
 )
 
 import jwt  # noqa: E402

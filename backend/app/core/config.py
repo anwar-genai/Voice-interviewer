@@ -39,6 +39,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Database ----------------------------------------------------------
+    # Supabase Postgres connection string. Use the direct connection or the
+    # session-mode pooler (transaction-mode pooler breaks Alembic DDL).
+    # e.g. postgresql+psycopg://postgres:<pw>@db.<ref>.supabase.co:5432/postgres
+    database_url: str | None = None
+    # Data minimization: interviews older than this are purged (app/db/retention.py).
+    retention_days: int = 30
+
     # --- Auth (Supabase) ---------------------------------------------------
     # The backend verifies Supabase-issued JWTs; Supabase owns the user store.
     # New projects sign tokens with asymmetric keys (ES256/RS256) verified via
@@ -137,6 +145,11 @@ class Settings(BaseSettings):
         if missing:
             raise MissingConfigError(f"LiveKit is not configured: missing {', '.join(missing)}")
         return self.livekit_url, self.livekit_api_key, self.livekit_api_secret  # type: ignore[return-value]
+
+    def require_database_url(self) -> str:
+        if not self.database_url:
+            raise MissingConfigError("Database is not configured: missing DATABASE_URL")
+        return self.database_url
 
     def require_supabase_jwt_secret(self) -> str:
         if not self.supabase_jwt_secret:

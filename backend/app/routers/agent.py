@@ -2,15 +2,19 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from livekit import api as lk_api
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from ..core.config import MissingConfigError, get_settings
 from ..core.ratelimit import rate_limit
+from ..db import get_db
+from ..db.models import Interview
 
 logger = logging.getLogger("interview.agent")
 
@@ -27,11 +31,16 @@ class JoinTokenRequest(BaseModel):
 
 
 @router.post("/join-token")
-async def create_join_token(body: JoinTokenRequest, user_id: str = Depends(rate_limit)):
-    """Create the interview room and mint a LiveKit join token for the caller.
+async def create_join_token(
+    body: JoinTokenRequest,
+    user_id: str = Depends(rate_limit),
+    db: Session = Depends(get_db),
+):
+    """Create the interview room, persist the interview, and mint a join token.
 
     Room and identity are derived from the authenticated user, never from the
-    client. Phase 2 will persist the consent record in the schema.
+    client. The interview (with the consent record) is saved so it survives
+    restarts and belongs to the user.
     """
     if not body.consent:
         raise HTTPException(
@@ -69,6 +78,17 @@ async def create_join_token(body: JoinTokenRequest, user_id: str = Depends(rate_
         logger.exception("Failed to create interview room for user=%s", user_id)
         raise HTTPException(status_code=502, detail="Failed to create interview room")
 
+    interview = Interview(
+        user_id=user_id,
+        room=room,
+        status="created",
+        job=body.job or {},
+        resume=resume,
+        consent_at=datetime.now(timezone.utc),
+    )
+    db.add(interview)
+    db.commit()
+
     now = int(time.time())
     payload = {
         "iss": api_key,
@@ -84,4 +104,10 @@ async def create_join_token(body: JoinTokenRequest, user_id: str = Depends(rate_
         },
     }
     token = jwt.encode(payload, api_secret, algorithm="HS256")
-    return {"url": livekit_url, "token": token, "room": room, "identity": identity}
+    return {
+        "url": livekit_url,
+        "token": token,
+        "room": room,
+        "identity": identity,
+        "interview_id": interview.id,
+    }

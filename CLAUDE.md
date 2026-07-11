@@ -35,10 +35,13 @@ security/privacy/safety/evals/o11y), `DEPLOYMENT.md` (how to ship).
 - **Phase 1** (auth, input hardening, prompt-injection isolation) — done, on `main`.
 - **Turn-detection fix** (semantic end-of-utterance) — done, on `main`.
 - **Phase 2** (persistence: SQLAlchemy + Alembic on Supabase Postgres; Interview/Turn/
-  Feedback; owner-scoped list/get/erasure; retention TTL) — branch `phase-2-persistence`.
-  Interviews are saved on join-token; feedback/transcript *rows* exist but are
-  populated in Phase 3.
-- **Next:** Phase 3 (capture transcript turns, wire feedback flow, history UI).
+  Feedback; owner-scoped list/get/erasure; retention TTL) — done, on `main`.
+- **Phase 3** (product loop: agent worker persists transcript turns + interview
+  lifecycle status; `/feedback/generate` scores the saved transcript once and stores
+  it, `/feedback/{id}` re-reads it; feedback report + history UI; groundedness guard +
+  output-safety/on-task prompt hardening; feedback calibration/groundedness evals) —
+  branch `phase-3-product-loop`.
+- **Next:** Phase 4 (testing, full eval harness, deeper observability).
 
 Work is phase-by-phase per `ROADMAP.md`, one commit per phase; non-phase fixes
 (like turn-detection) get their own branch off `main`.
@@ -61,7 +64,9 @@ cd backend && python -m app.db.retention              # purge expired interviews
 # Checks
 cd backend && python tests/test_phase1_security.py   # 8 security checks
 cd backend && python tests/test_persistence.py       # ownership, cascade erasure, retention
+cd backend && python tests/test_phase3.py            # transcript capture, feedback wiring, groundedness
 cd backend && python -m evals.runner extraction      # eval suite (calls Cerebras)
+cd backend && python -m evals.runner feedback        # calibration + groundedness (calls Cerebras)
 ```
 
 ## Gotchas / config that bites
@@ -76,7 +81,8 @@ cd backend && python -m evals.runner extraction      # eval suite (calls Cerebra
   secret/service_role).
 - **Turn detection.** `TURN_DETECTION_MODEL=english` (default) is downloaded and is
   what makes turn-taking responsive. Tune `MIN/MAX_ENDPOINTING_DELAY_SECONDS` for
-  pace. To use **multilingual** instead: set `TURN_DETECTION_MODEL=multilingual` and
+  pace. Noisy room (fan) interrupting the agent mid-sentence? Raise
+  `VAD_ACTIVATION_THRESHOLD` (~0.65) and `MIN_INTERRUPTION_DURATION_SECONDS` (~1.0). To use **multilingual** instead: set `TURN_DETECTION_MODEL=multilingual` and
   run `python run_agent.py download-files` — the multilingual ONNX
   (`livekit/turn-detector`, ref `v0.3.0-intl`) was left partially downloaded because
   English is the default; that command finishes it. Models cache under

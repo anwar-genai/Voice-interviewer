@@ -97,6 +97,13 @@ class Settings(BaseSettings):
     # done, up to max when you still sound mid-thought. Tune to mic/speaking pace.
     min_endpointing_delay_seconds: float = 0.5
     max_endpointing_delay_seconds: float = 4.0
+    # Noise robustness. Raise both in a noisy room (fan, street) so background
+    # sound doesn't read as speech and interrupt the agent mid-sentence:
+    # activation_threshold ~0.6-0.7 makes the VAD less trigger-happy;
+    # min_interruption_duration ~1.0 requires sustained speech to barge in.
+    # (False interruptions already auto-resume after ~2s via LiveKit defaults.)
+    vad_activation_threshold: float = 0.5
+    min_interruption_duration_seconds: float = 0.5
 
     # --- API ---------------------------------------------------------------
     # Comma-separated in the environment: "http://localhost:5173,https://app.example.com".

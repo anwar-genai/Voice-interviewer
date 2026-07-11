@@ -29,12 +29,20 @@ class InterviewSummary(BaseModel):
     room: str
     status: str
     job_title: str | None
+    # None until the interview has been scored (Phase 3 feedback flow).
+    overall_score: int | None
     created_at: datetime
+
+
+class TurnOut(BaseModel):
+    role: str  # "agent" | "user"
+    content: str
 
 
 class InterviewDetail(InterviewSummary):
     job: dict[str, Any]
     resume: str
+    turns: list[TurnOut]
 
 
 def _summary(iv: Interview) -> InterviewSummary:
@@ -43,11 +51,15 @@ def _summary(iv: Interview) -> InterviewSummary:
         room=iv.room,
         status=iv.status,
         job_title=(iv.job or {}).get("job_title"),
+        # ponytail: lazy-loads feedback per row (N+1). Fine for one user's own
+        # history; join/selectinload if a user ever has thousands of interviews.
+        overall_score=iv.feedback.overall_score if iv.feedback else None,
         created_at=iv.created_at,
     )
 
 
-def _owned_or_404(db: Session, interview_id: str, user_id: str) -> Interview:
+def owned_or_404(db: Session, interview_id: str, user_id: str) -> Interview:
+    """Fetch an interview the caller owns, or 404. Shared with the feedback router."""
     iv = db.get(Interview, interview_id)
     if iv is None or iv.user_id != user_id:
         # 404 (not 403) so we don't leak that someone else's interview exists.
@@ -92,8 +104,13 @@ def delete_all_interviews(user_id: str = Depends(require_user), db: Session = De
 def get_interview(
     interview_id: str, user_id: str = Depends(require_user), db: Session = Depends(get_db)
 ):
-    iv = _owned_or_404(db, interview_id, user_id)
-    return InterviewDetail(**_summary(iv).model_dump(), job=iv.job or {}, resume=iv.resume)
+    iv = owned_or_404(db, interview_id, user_id)
+    return InterviewDetail(
+        **_summary(iv).model_dump(),
+        job=iv.job or {},
+        resume=iv.resume,
+        turns=[TurnOut(role=t.role, content=t.content) for t in iv.turns],
+    )
 
 
 @router.delete("/{interview_id}")
@@ -101,7 +118,7 @@ def delete_interview(
     interview_id: str, user_id: str = Depends(require_user), db: Session = Depends(get_db)
 ):
     """Erase one interview and its turns + feedback (cascade)."""
-    iv = _owned_or_404(db, interview_id, user_id)
+    iv = owned_or_404(db, interview_id, user_id)
     db.delete(iv)
     db.commit()
     return {"deleted": 1}

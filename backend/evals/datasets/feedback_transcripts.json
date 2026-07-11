@@ -1,0 +1,16 @@
+{
+  "substantive": {
+    "job": {
+      "job_title": "Backend Engineer",
+      "qualifications": "Python, REST APIs, PostgreSQL, distributed systems"
+    },
+    "resume": "Backend engineer with 4 years building Python services. Shipped a payments API on FastAPI and PostgreSQL; on-call for a 3-service platform.",
+    "transcript": "Interviewer: Thanks for joining. Tell me a little about yourself.\nCandidate: Sure. I'm a backend engineer with about four years of experience, mostly in Python. Most recently I built and owned a payments API using FastAPI and PostgreSQL, and I was on call for a small platform of three services.\nInterviewer: How did you keep that payments API reliable under load?\nCandidate: We added idempotency keys so retries wouldn't double-charge, put the write path behind a queue, and set up alerting on p99 latency and error rate. We also load-tested before big launches and tuned the connection pool.\nInterviewer: Tell me about a time a deploy went wrong and what you did.\nCandidate: We shipped a migration that locked a large table and caused timeouts. I rolled it back within a few minutes using our feature flag, then re-did the migration in batches off-peak. Afterwards I wrote a runbook so the next person wouldn't hit the same thing.\nInterviewer: Great, that's helpful. Any questions for me?\nCandidate: Yes, what does the on-call rotation and incident process look like on this team?"
+  },
+  "thin": {
+    "job": {"job_title": "Backend Engineer", "qualifications": "Python"},
+    "resume": "Backend engineer.",
+    "transcript": "Interviewer: Tell me about yourself.\nCandidate: Um, not sure.",
+    "candidate_text": "Um, not sure."
+  }
+}

@@ -1,35 +1,84 @@
+"""Feedback: score a completed interview from its persisted transcript.
+
+The transcript now lives in the DB (captured by the agent worker), so the client
+sends only an ``interview_id``; the server loads the turns, scores them once, and
+stores the result. Generation is idempotent — a second call returns the saved
+feedback rather than re-billing the LLM.
+"""
+
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from ..core.auth import require_user
 from ..core.config import MissingConfigError
 from ..core.ratelimit import rate_limit
-from ..llm import InterviewFeedback, InvalidInputError, LLMError, generate_feedback
+from ..db import get_db
+from ..db.models import Feedback
+from ..llm import (
+    InterviewFeedback,
+    InvalidInputError,
+    LLMError,
+    generate_feedback,
+    require_groundable_transcript,
+)
+from .interviews import owned_or_404
 
 logger = logging.getLogger("interview.feedback")
 
 # Every feedback endpoint requires an authenticated user.
 router = APIRouter(prefix="/feedback", tags=["feedback"], dependencies=[Depends(require_user)])
 
+_ROLE_LABEL = {"agent": "Interviewer", "user": "Candidate"}
+
 
 class GenerateFeedbackRequest(BaseModel):
-    job_context: dict[str, Any]
-    candidate_resume: str
-    interview_transcript: str
+    interview_id: str
+
+
+def _as_feedback(row: Feedback) -> InterviewFeedback:
+    return InterviewFeedback(
+        strengths=row.strengths,
+        improvements=row.improvements,
+        recommendations=row.recommendations,
+        overall_score=row.overall_score,
+        technical_score=row.technical_score,
+        communication_score=row.communication_score,
+    )
+
+
+def build_transcript(turns: list[Any]) -> tuple[str, str]:
+    """Assemble the labelled transcript and the candidate-only text from turns.
+
+    Returns ``(transcript, candidate_text)`` — the first for the feedback prompt,
+    the second for the groundedness guard.
+    """
+    transcript = "\n".join(f"{_ROLE_LABEL[t.role]}: {t.content}" for t in turns if t.role in _ROLE_LABEL)
+    candidate_text = " ".join(t.content for t in turns if t.role == "user")
+    return transcript, candidate_text
 
 
 @router.post("/generate", response_model=InterviewFeedback)
-def generate_interview_feedback(request: GenerateFeedbackRequest, _: str = Depends(rate_limit)):
-    """Score a completed interview transcript against the feedback rubric."""
+def generate_interview_feedback(
+    request: GenerateFeedbackRequest,
+    user_id: str = Depends(rate_limit),
+    db: Session = Depends(get_db),
+):
+    """Score a completed interview against the feedback rubric, once, and store it."""
+    iv = owned_or_404(db, request.interview_id, user_id)
+    if iv.feedback is not None:
+        return _as_feedback(iv.feedback)  # idempotent: don't re-bill the LLM
+
+    transcript, candidate_text = build_transcript(iv.turns)
+
     try:
-        return generate_feedback(
-            job=request.job_context,
-            resume=request.candidate_resume,
-            transcript=request.interview_transcript,
-        )
+        # Groundedness: refuse to score a transcript with too little candidate
+        # speech instead of letting the model invent strengths.
+        require_groundable_transcript(candidate_text)
+        feedback = generate_feedback(job=iv.job or {}, resume=iv.resume, transcript=transcript)
     except InvalidInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except MissingConfigError:
@@ -38,6 +87,23 @@ def generate_interview_feedback(request: GenerateFeedbackRequest, _: str = Depen
     except LLMError:
         logger.exception("Feedback generation failed")
         raise HTTPException(status_code=502, detail="Feedback service failed")
+
+    db.add(Feedback(interview_id=iv.id, **feedback.model_dump()))
+    db.commit()
+    return feedback
+
+
+@router.get("/{interview_id}", response_model=InterviewFeedback)
+def get_interview_feedback(
+    interview_id: str,
+    user_id: str = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Return the stored feedback for an interview, or 404 if it hasn't been scored."""
+    iv = owned_or_404(db, interview_id, user_id)
+    if iv.feedback is None:
+        raise HTTPException(status_code=404, detail="This interview has not been scored yet")
+    return _as_feedback(iv.feedback)
 
 
 class InterviewMetrics(BaseModel):

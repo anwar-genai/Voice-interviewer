@@ -30,6 +30,7 @@ from livekit.plugins.turn_detector.english import EnglishModel
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from app.core.config import MissingConfigError, Settings, get_settings
+from app.db.transcript import attach_transcript_capture
 from app.llm import build_instructions, parse_room_metadata
 from app.llm.prompts import INTERVIEWER_GREETING_INSTRUCTIONS
 from app.observability import configure_logging
@@ -74,7 +75,9 @@ async def entrypoint(ctx: JobContext) -> None:
         turn_detection=_turn_detection(settings),
         min_endpointing_delay=settings.min_endpointing_delay_seconds,
         max_endpointing_delay=settings.max_endpointing_delay_seconds,
-        vad=silero.VAD.load(),
+        # Noise robustness: how long "speech" must last to count as a barge-in.
+        min_interruption_duration=settings.min_interruption_duration_seconds,
+        vad=silero.VAD.load(activation_threshold=settings.vad_activation_threshold),
         stt=deepgram.STT(
             model=settings.deepgram_stt_model,
             api_key=settings.require_deepgram_api_key(),
@@ -92,6 +95,10 @@ async def entrypoint(ctx: JobContext) -> None:
 
     # Per-turn latency now; a usage + cost summary when the session ends.
     attach_session_metrics(session, ctx, room_name=ctx.room.name)
+
+    # Persist each turn + the interview's lifecycle status (created -> in_progress
+    # -> completed/dropped) so it survives the session and can be scored.
+    attach_transcript_capture(session, room_name=ctx.room.name)
 
     agent = Agent(
         instructions=build_instructions(context),

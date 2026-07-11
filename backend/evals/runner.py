@@ -14,10 +14,12 @@ from collections.abc import Callable
 from app.observability import configure_logging
 
 from .extraction import eval_extraction
+from .feedback import eval_feedback
 from .harness import SuiteResult, print_report
 
 SUITES: dict[str, Callable[[], SuiteResult]] = {
     "extraction": eval_extraction.run,
+    "feedback": eval_feedback.run,
 }
 
 

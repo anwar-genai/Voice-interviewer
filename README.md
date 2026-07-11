@@ -23,9 +23,11 @@ Reference: Interviewer Voice Agent with LiveKit (Cerebras) — see the Cookbook 
     - `agent.py`: LiveKit room creation and join token generation
     - `feedback.py`: AI-powered interview feedback generation
     - `analytics.py`: Session tracking and performance analytics
-  - `app/agents/interviewer.py`: Core interview agent logic
-  - `run_agent.py`: Standard agent worker
-  - `run_agent_improved.py`: Enhanced agent with better audio and features
+  - `app/core/config.py`: Typed, validated settings — the single config source
+  - `app/llm/`: Pure, importable AI core (prompts, extraction, interviewer, feedback)
+  - `app/observability/`: Logging + voice-pipeline latency/cost metrics
+  - `run_agent.py`: Agent worker (voice pipeline)
+  - `evals/`: Offline eval suites (extraction golden-set)
   - `requirements.txt`: Backend dependencies with LiveKit agents
   - `env.example`: Environment variable template
 - `frontend/`
@@ -74,7 +76,7 @@ CEREBRAS_API_KEY=your_cerebras_key
 DEEPGRAM_API_KEY=your_deepgram_key
 
 # Optional
-CEREBRAS_MODEL=llama3.3-70b
+CEREBRAS_MODEL=gpt-oss-120b
 AGENT_TEMPERATURE=0.7
 DEEPGRAM_TTS_MODEL=aura-asteria-en
 ```
@@ -94,7 +96,7 @@ uvicorn uvicorn_app:app --reload --port 8000
 cd voice-interviewer
 .venv\Scripts\activate
 cd backend
-python run_agent_improved.py dev  # Use improved version for better audio
+python run_agent.py dev
 ```
 
 **Terminal 3 - Frontend:**
@@ -165,12 +167,11 @@ Open http://localhost:5173 and start practicing!
 ### 🛠️ Troubleshooting
 
 #### Agent doesn't greet you
-- Ensure agent worker is running: `python run_agent_improved.py dev`
+- Ensure agent worker is running: `python run_agent.py dev`
 - Check LiveKit credentials in `.env`
 - Verify all API keys are valid
 
 #### Audio interruptions
-- Use the improved agent: `run_agent_improved.py`
 - Check Deepgram API key and limits
 - Try different TTS models in environment variables
 

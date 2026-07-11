@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from pydantic import BaseModel, HttpUrl
+import io
+
+import pdfplumber
 import requests
 from bs4 import BeautifulSoup
-import io
-import pdfplumber
-import os
-import json
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from pydantic import BaseModel, HttpUrl
 
+from ..core.config import MissingConfigError, get_settings
+from ..llm import InvalidInputError, LLMError, ParsedJob, ParsedResume, extract_job
 
 router = APIRouter(prefix="/utils", tags=["utils"])
 
@@ -15,195 +16,99 @@ class ParseLinkRequest(BaseModel):
     url: HttpUrl
 
 
-class ParsedJob(BaseModel):
-    job_title: str | None = None
-    job_type: str | None = None
-    location: str | None = None
-    start_date: str | None = None
-    qualifications: str | None = None
-    responsibilities: str | None = None
-    benefits: str | None = None
-
-
-@router.post("/parse-link", response_model=ParsedJob)
-def parse_link(body: ParseLinkRequest):
-    try:
-        response = requests.get(
-            str(body.url),
-            timeout=20,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-            },
-        )
-        response.raise_for_status()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {exc}")
-
-    soup = BeautifulSoup(response.text, "html.parser")
-    text = soup.get_text("\n")
-    lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    cleaned = "\n".join(chunk for chunk in chunks if chunk)
-
-    # Heuristic extraction (placeholder until LLM structured parsing is wired)
-    def find_section(keyword: str) -> str | None:
-        lowered = cleaned.lower()
-        idx = lowered.find(keyword)
-        if idx == -1:
-            return None
-        window = cleaned[idx: idx + 1000]
-        return window
-
-    return ParsedJob(
-        job_title=None,
-        job_type=None,
-        location=None,
-        start_date=None,
-        qualifications=find_section("qualification"),
-        responsibilities=find_section("responsibilit"),
-        benefits=find_section("benefit"),
-    )
-
-
-class ParsePdfRequest(BaseModel):
-    # base64 PDF content could be used later; for now, accept URL
-    url: HttpUrl
-
-
-class ParsedResume(BaseModel):
+class ParseJobTextRequest(BaseModel):
     text: str
 
 
-@router.post("/parse-pdf", response_model=ParsedResume)
-def parse_pdf(body: ParsePdfRequest):
+def _fetch_page_text(url: str) -> str:
+    """Fetch a URL and reduce it to visible text."""
+    settings = get_settings()
     try:
-        response = requests.get(str(body.url), timeout=30)
+        response = requests.get(
+            url,
+            timeout=settings.fetch_timeout_seconds,
+            headers={"User-Agent": settings.fetch_user_agent},
+        )
         response.raise_for_status()
-    except Exception as exc:
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {exc}")
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    lines = (line.strip() for line in soup.get_text("\n").splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    return "\n".join(chunk for chunk in chunks if chunk)
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        pages_text = [page.extract_text() or "" for page in pdf.pages]
+    return "\n\n".join(pages_text).strip()
+
+
+def _extract_job_or_http_error(posting_text: str) -> ParsedJob:
+    """Run extraction, translating LLM-core errors into HTTP status codes."""
+    try:
+        return extract_job(posting_text)
+    except InvalidInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except MissingConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.post("/parse-job-text-llm", response_model=ParsedJob)
+def parse_job_text_llm(body: ParseJobTextRequest):
+    """Extract structured job fields from a pasted job description."""
+    return _extract_job_or_http_error(body.text)
+
+
+@router.post("/parse-link-llm", response_model=ParsedJob)
+def parse_link_llm(body: ParseLinkRequest):
+    """Fetch a job posting URL and extract structured job fields from it."""
+    cleaned = _fetch_page_text(str(body.url))
+
+    if len(cleaned) < 100:
+        # Many sites (e.g. LinkedIn) require auth/JS; advise pasting raw text instead.
+        raise HTTPException(
+            status_code=422,
+            detail="Content not accessible. Try /utils/parse-job-text-llm with pasted description.",
+        )
+
+    return _extract_job_or_http_error(cleaned)
+
+
+@router.post("/parse-pdf", response_model=ParsedResume)
+def parse_pdf(body: ParseLinkRequest):
+    """Extract text from a PDF resume hosted at a URL."""
+    try:
+        response = requests.get(str(body.url), timeout=get_settings().fetch_timeout_seconds)
+        response.raise_for_status()
+    except requests.RequestException as exc:
         raise HTTPException(status_code=400, detail=f"Failed to fetch PDF: {exc}")
 
-    content_type = response.headers.get("content-type", "")
-    if "pdf" not in content_type:
+    if "pdf" not in response.headers.get("content-type", ""):
         raise HTTPException(status_code=400, detail="URL does not point to a PDF")
 
     try:
-        with pdfplumber.open(io.BytesIO(response.content)) as pdf:
-            pages_text = [page.extract_text() or "" for page in pdf.pages]
-        text = "\n\n".join(pages_text).strip()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {exc}")
+        text = _extract_pdf_text(response.content)
+    except Exception as exc:  # noqa: BLE001 - pdfplumber raises many types
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {exc}")
 
     return ParsedResume(text=text)
 
 
 @router.post("/parse-pdf-upload", response_model=ParsedResume)
 def parse_pdf_upload(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(".pdf"):
+    """Extract text from an uploaded PDF resume."""
+    if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     try:
-        content = file.file.read()
-        with pdfplumber.open(io.BytesIO(content)) as pdf:
-            pages_text = [page.extract_text() or "" for page in pdf.pages]
-        text = "\n\n".join(pages_text).strip()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to parse uploaded PDF: {exc}")
+        text = _extract_pdf_text(file.file.read())
+    except Exception as exc:  # noqa: BLE001 - pdfplumber raises many types
+        raise HTTPException(status_code=400, detail=f"Failed to parse uploaded PDF: {exc}")
     finally:
         file.file.close()
 
     return ParsedResume(text=text)
-
-
-class ParseJobTextRequest(BaseModel):
-    text: str
-
-
-def _llm_extract_job_from_text(text: str) -> ParsedJob:
-    try:
-        from cerebras.cloud.sdk import Cerebras  # type: ignore[import-not-found]
-    except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"Cerebras SDK not available: {exc}")
-
-    api_key = os.environ.get("CEREBRAS_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="CEREBRAS_API_KEY not configured")
-
-    client = Cerebras(api_key=api_key)
-
-    job_schema = {
-        "type": "object",
-        "properties": {
-            "job title": {"type": "string"},
-            "job type": {"type": "string", "enum": ["full-time", "part-time", "contract", "internship"]},
-            "location": {"type": "string"},
-            "start date": {"type": "string"},
-            "qualifications": {"type": "string"},
-            "responsibilities": {"type": "string"},
-            "benefits": {"type": "string"},
-        },
-        "required": ["job title"],
-        "additionalProperties": False,
-    }
-
-    completion = client.chat.completions.create(
-        model=os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b"),
-        messages=[
-            {"role": "system", "content": f"You are a link summarizing agent. Extract job information from: {text}"},
-            {"role": "user", "content": "Summarize the relevant job information in the required JSON schema."},
-        ],
-        response_format={
-            "type": "json_schema",
-            "json_schema": {"name": "job_schema", "strict": True, "schema": job_schema},
-        },
-    )
-
-    try:
-        content = completion.choices[0].message.content  # type: ignore[index]
-        data = json.loads(content)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to parse LLM output: {exc}")
-
-    return ParsedJob(
-        job_title=data.get("job title"),
-        job_type=data.get("job type"),
-        location=data.get("location"),
-        start_date=data.get("start date"),
-        qualifications=data.get("qualifications"),
-        responsibilities=data.get("responsibilities"),
-        benefits=data.get("benefits"),
-    )
-
-
-@router.post("/parse-job-text-llm", response_model=ParsedJob)
-def parse_job_text_llm(body: ParseJobTextRequest):
-    if not body.text.strip():
-        raise HTTPException(status_code=400, detail="Text is empty")
-    return _llm_extract_job_from_text(body.text)
-
-
-@router.post("/parse-link-llm", response_model=ParsedJob)
-def parse_link_llm(body: ParseLinkRequest):
-    try:
-        resp = requests.get(
-            str(body.url),
-            timeout=20,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-            },
-        )
-        resp.raise_for_status()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {exc}")
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    text = soup.get_text("\n")
-    lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    cleaned = "\n".join(chunk for chunk in chunks if chunk)
-
-    if not cleaned or len(cleaned) < 100:
-        # Many sites (e.g., LinkedIn) require auth/JS; advise pasting raw text instead
-        raise HTTPException(status_code=422, detail="Content not accessible. Try /utils/parse-job-text-llm with pasted description.")
-
-    return _llm_extract_job_from_text(cleaned)
-

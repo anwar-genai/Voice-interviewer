@@ -1,0 +1,39 @@
+[
+  {
+    "id": "backend-eng-full-time",
+    "posting": "Senior Backend Engineer\n\nAcme Corp — San Francisco, CA (Hybrid)\nFull-time. Start date: immediate.\n\nAbout the role\nYou will design and operate the services behind our payments platform.\n\nResponsibilities\n- Build and maintain Python microservices\n- Own service reliability, on-call rotation\n- Mentor junior engineers\n\nQualifications\n- 5+ years of backend experience\n- Strong Python and PostgreSQL\n- Experience with distributed systems\n\nBenefits\n- Health, dental, and vision insurance\n- 401(k) with company match\n- Unlimited PTO",
+    "expected": {
+      "job_title": "Senior Backend Engineer",
+      "job_type": "full-time",
+      "location": "San Francisco",
+      "qualifications": "Python",
+      "benefits": "401(k)"
+    }
+  },
+  {
+    "id": "data-science-intern",
+    "posting": "Data Science Intern (Summer 2026)\n\nNorthwind Analytics, Remote.\nThis is a 12-week paid internship beginning June 2026.\n\nWhat you'll do\nWork with the modeling team to prototype forecasting models in Python and evaluate them against production baselines.\n\nWho you are\nCurrently pursuing a degree in statistics, computer science, or a related field. Familiar with pandas and scikit-learn. Coursework in machine learning preferred.",
+    "expected": {
+      "job_title": "Data Science Intern",
+      "job_type": "internship",
+      "location": "Remote",
+      "responsibilities": "forecasting"
+    }
+  },
+  {
+    "id": "contract-frontend",
+    "posting": "Frontend Developer — 6 month contract\n\nWe are looking for a contract Frontend Developer to help ship a React design system. Work is fully remote within the EU.\n\nRequirements: expert TypeScript, React 18, and testing with Vitest. Figma literacy expected.\n\nStart: as soon as possible.",
+    "expected": {
+      "job_title": "Frontend Developer",
+      "job_type": "contract",
+      "qualifications": "TypeScript"
+    }
+  },
+  {
+    "id": "title-only-sparse",
+    "posting": "Warehouse Associate needed. Apply within.",
+    "expected": {
+      "job_title": "Warehouse Associate"
+    }
+  }
+]

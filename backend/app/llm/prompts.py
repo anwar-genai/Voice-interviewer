@@ -18,7 +18,7 @@ from typing import Any
 
 EXTRACTION_PROMPT_VERSION = "extraction-v1"
 INTERVIEWER_PROMPT_VERSION = "interviewer-v1"
-FEEDBACK_PROMPT_VERSION = "feedback-v1"
+FEEDBACK_PROMPT_VERSION = "feedback-v2"  # v2: judge STT transcripts fairly
 
 # Defense-in-depth cap; the routers enforce the real per-field limits.
 MAX_UNTRUSTED_CHARS = 50_000
@@ -122,6 +122,12 @@ Score each dimension from 1 to 10:
 Ground every strength, improvement, and recommendation in something the
 candidate actually said in the transcript. Do not invent evidence. Be specific,
 constructive, and encouraging.
+
+The transcript is automatic speech-recognition output: technical names are
+often transcribed phonetically or wrongly (e.g. "pie PDF" for "PyPDF2",
+"LangGen" for "LangChain"). Treat garbled tool or library names as likely
+transcription artifacts, not candidate errors — judge the substance of the
+answer and never penalize the candidate for them.
 
 Assess only job-relevant skills the candidate demonstrated. Never base feedback
 on protected characteristics (age, gender, race, national origin, accent, or

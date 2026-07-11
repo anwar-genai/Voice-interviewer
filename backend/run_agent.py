@@ -31,7 +31,7 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from app.core.config import MissingConfigError, Settings, get_settings
 from app.db.transcript import attach_transcript_capture
-from app.llm import build_instructions, parse_room_metadata
+from app.llm import build_instructions, parse_room_metadata, technical_keywords
 from app.llm.prompts import INTERVIEWER_GREETING_INSTRUCTIONS
 from app.observability import configure_logging
 from app.observability.metrics import attach_session_metrics
@@ -69,6 +69,17 @@ async def entrypoint(ctx: JobContext) -> None:
         len(context.resume),
     )
 
+    # STT vocabulary hints from this interview's JD/resume, so Deepgram doesn't
+    # mangle niche terms ("PyPDF2" -> "pie PDF") and unfairly tank the feedback.
+    vocab = technical_keywords(context)
+    stt_kwargs: dict = {}
+    if vocab:
+        if "nova-3" in settings.deepgram_stt_model:
+            stt_kwargs["keyterms"] = vocab
+        else:  # nova-2 family takes (word, boost) pairs
+            stt_kwargs["keywords"] = [(w, 1.5) for w in vocab]
+        logger.info("STT vocabulary: %d term(s), e.g. %s", len(vocab), vocab[:5])
+
     session = AgentSession(
         # Semantic turn detection so the agent replies as soon as you've finished
         # a thought, instead of waiting out the full silence timeout.
@@ -81,6 +92,7 @@ async def entrypoint(ctx: JobContext) -> None:
         stt=deepgram.STT(
             model=settings.deepgram_stt_model,
             api_key=settings.require_deepgram_api_key(),
+            **stt_kwargs,
         ),
         llm=openai.LLM.with_cerebras(
             model=settings.cerebras_model,

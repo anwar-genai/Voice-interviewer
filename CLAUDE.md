@@ -66,6 +66,7 @@ cd backend && python -m app.db.retention              # purge expired interviews
 cd backend && python tests/test_phase1_security.py   # 8 security checks
 cd backend && python tests/test_persistence.py       # ownership, cascade erasure, retention
 cd backend && python tests/test_phase3.py            # transcript capture, feedback wiring, groundedness
+cd backend && python tests/test_stt_fairness.py      # STT keyword mining + transcription-aware rubric
 cd backend && python -m evals.runner extraction      # eval suite (calls Cerebras)
 cd backend && python -m evals.runner feedback        # calibration + groundedness (calls Cerebras)
 ```

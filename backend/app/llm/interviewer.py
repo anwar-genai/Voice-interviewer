@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from .prompts import build_interviewer_instructions
 from .schemas import InterviewContext
 
 logger = logging.getLogger(__name__)
+
+_TECH_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.]*")
 
 DEFAULT_JOB: dict[str, Any] = {
     "job_title": "Software Engineer",
@@ -44,3 +47,37 @@ def parse_room_metadata(metadata: str | None) -> InterviewContext:
 def build_instructions(context: InterviewContext) -> str:
     """The interviewer's system prompt for this session."""
     return build_interviewer_instructions(context.job, context.resume)
+
+
+def technical_keywords(context: InterviewContext, *, limit: int = 50) -> list[str]:
+    """STT vocabulary hints mined from this interview's job + resume.
+
+    Every scoring decision downstream reads the transcript, and generic STT
+    mangles niche technical terms ("PyPDF2" -> "pie PDF") — which the feedback
+    model then blames on the candidate. Feeding the terms the candidate is
+    *likely to say* to the STT keeps the transcript, and therefore the score,
+    honest.
+
+    ponytail: shape heuristic (internal caps / digits / +# / short acronyms),
+    no NLP. Catches FastAPI/PyPDF2/GDPR/C++; an LLM extraction pass if resumes
+    prove too plain-cased for it.
+    """
+    text = context.resume + " " + json.dumps(context.job)
+    seen: dict[str, str] = {}
+    for token in _TECH_TOKEN_RE.findall(text):
+        token = token.rstrip(".")
+        if not 2 <= len(token) <= 30:
+            continue
+        if token.isupper():
+            ok = len(token) <= 6  # acronyms (SQL, GDPR); skips SHOUTING headers
+        else:
+            ok = (
+                any(c.isupper() for c in token[1:])  # FastAPI, LangChain, PyTorch
+                or any(c.isdigit() for c in token)   # PyPDF2, psycopg3, s3
+                or "+" in token or "#" in token      # C++, C#
+            )
+        if ok:
+            seen.setdefault(token.lower(), token)
+        if len(seen) >= limit:  # over-boosting degrades general accuracy
+            break
+    return list(seen.values())

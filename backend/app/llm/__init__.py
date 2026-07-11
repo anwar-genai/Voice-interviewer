@@ -8,7 +8,7 @@ from .errors import InvalidInputError, LLMError
 from .extraction import extract_job
 from .feedback import generate_feedback
 from .guardrails import require_groundable_transcript
-from .interviewer import build_instructions, parse_room_metadata
+from .interviewer import build_instructions, parse_room_metadata, technical_keywords
 from .schemas import InterviewContext, InterviewFeedback, ParsedJob, ParsedResume
 
 __all__ = [
@@ -23,4 +23,5 @@ __all__ = [
     "generate_feedback",
     "parse_room_metadata",
     "require_groundable_transcript",
+    "technical_keywords",
 ]

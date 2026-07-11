@@ -28,6 +28,7 @@ frontend/src/    Vite + React; ui/App.tsx is the main component, lib/supabase.ts
 
 Plan & rationale: `ROADMAP.md` (by phase), `CROSS_CUTTING.md` (by concern:
 security/privacy/safety/evals/o11y), `DEPLOYMENT.md` (how to ship).
+Phase retros (challenges faced + improvements): `PHASE3.md`.
 
 ## Status
 

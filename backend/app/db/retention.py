@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
@@ -32,13 +32,36 @@ def purge_expired_interviews(db: Session, older_than_days: int) -> int:
     return len(expired)
 
 
+# A worker crash never fires the session close event, stranding interviews as
+# in_progress forever. Anything in_progress this long is over.
+STALE_IN_PROGRESS_HOURS = 6
+
+
+def mark_stale_in_progress(db: Session, *, older_than_hours: int = STALE_IN_PROGRESS_HOURS) -> int:
+    """Mark interviews stuck in_progress as dropped; returns how many."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
+    result = db.execute(
+        update(Interview)
+        .where(Interview.status == "in_progress", Interview.updated_at < cutoff)
+        .values(status="dropped")
+    )
+    db.commit()
+    return result.rowcount
+
+
 def main() -> None:
     configure_logging()
     days = get_settings().retention_days
     db = _session_factory()()
     try:
+        stale = mark_stale_in_progress(db)
         removed = purge_expired_interviews(db, days)
-        logger.info("Retention purge: removed %d interview(s) older than %d days", removed, days)
+        logger.info(
+            "Retention: marked %d stale interview(s) dropped, removed %d older than %d days",
+            stale,
+            removed,
+            days,
+        )
     finally:
         db.close()
 

@@ -11,6 +11,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.auth import require_user
@@ -48,6 +50,28 @@ def _as_feedback(row: Feedback) -> InterviewFeedback:
         technical_score=row.technical_score,
         communication_score=row.communication_score,
     )
+
+
+def save_feedback(db: Session, interview_id: str, feedback: InterviewFeedback) -> InterviewFeedback:
+    """Persist the scores; if a concurrent request won the race, return theirs.
+
+    Two requests can both pass the ``feedback is None`` check (double-click on
+    End Interview, two tabs); unique(interview_id) catches the loser here.
+
+    ponytail: the loser still paid for one extra LLM call in that window; a row
+    lock would fix that but means holding a DB transaction across an LLM call —
+    not worth it while this runs single-worker.
+    """
+    db.add(Feedback(interview_id=interview_id, **feedback.model_dump()))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        row = db.scalar(select(Feedback).where(Feedback.interview_id == interview_id))
+        if row is None:  # constraint violation but no winner row: a real fault
+            raise
+        return _as_feedback(row)
+    return feedback
 
 
 def build_transcript(turns: list[Any]) -> tuple[str, str]:
@@ -88,9 +112,7 @@ def generate_interview_feedback(
         logger.exception("Feedback generation failed")
         raise HTTPException(status_code=502, detail="Feedback service failed")
 
-    db.add(Feedback(interview_id=iv.id, **feedback.model_dump()))
-    db.commit()
-    return feedback
+    return save_feedback(db, iv.id, feedback)
 
 
 @router.get("/{interview_id}", response_model=InterviewFeedback)
@@ -104,40 +126,3 @@ def get_interview_feedback(
     if iv.feedback is None:
         raise HTTPException(status_code=404, detail="This interview has not been scored yet")
     return _as_feedback(iv.feedback)
-
-
-class InterviewMetrics(BaseModel):
-    total_questions: int
-    response_time_avg: float
-    technical_depth: int
-    communication_clarity: int
-    engagement_level: int
-
-
-class MetricsRequest(BaseModel):
-    transcript: str
-
-
-@router.post("/metrics", response_model=InterviewMetrics)
-def calculate_interview_metrics(request: MetricsRequest):
-    """Cheap heuristic counts over a transcript. No LLM involved."""
-    transcript = request.transcript
-    words = transcript.split()
-    sentences = [s for s in transcript.split(".") if s.strip()]
-
-    return InterviewMetrics(
-        total_questions=transcript.count("?"),
-        response_time_avg=len(words) / max(len(sentences), 1) * 0.5,
-        technical_depth=min(
-            10,
-            transcript.count("technical") + transcript.count("experience") + transcript.count("project"),
-        ),
-        communication_clarity=min(
-            10,
-            transcript.count("explain") + transcript.count("describe") + transcript.count("example"),
-        ),
-        engagement_level=min(
-            10,
-            transcript.count("yes") + transcript.count("absolutely") + transcript.count("definitely"),
-        ),
-    )

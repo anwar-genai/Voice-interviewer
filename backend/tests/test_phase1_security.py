@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -15,14 +16,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Configure a known auth secret and a tiny rate limit BEFORE importing the app.
 SECRET = "test-jwt-secret"
+# The auth probe is GET /interviews (a real DB-backed route), so the suite needs
+# actual tables: a throwaway SQLite file works across the TestClient's threads
+# where :memory: would not.
+_DB_PATH = Path(tempfile.gettempdir()) / "vi_test_security.db"
+_DB_PATH.unlink(missing_ok=True)
 os.environ.update(
     AUTH_ENABLED="true",
     SUPABASE_JWT_SECRET=SECRET,
     SUPABASE_URL="https://example.supabase.co",
     RATE_LIMIT_PER_MINUTE="3",
-    # join-token now depends on get_db; a throwaway SQLite URL keeps this suite
-    # DB-free (the consent-rejection path never touches the session).
-    DATABASE_URL="sqlite://",
+    DATABASE_URL=f"sqlite:///{_DB_PATH.as_posix()}",
 )
 
 import jwt  # noqa: E402
@@ -32,8 +36,12 @@ from app.core.config import get_settings  # noqa: E402
 
 get_settings.cache_clear()  # drop any cached settings from a prior import
 
+from app.db import Base  # noqa: E402
+from app.db.session import _engine  # noqa: E402
 from app.llm.prompts import _isolate, build_feedback_messages  # noqa: E402
 from app.main import app  # noqa: E402
+
+Base.metadata.create_all(_engine())
 
 client = TestClient(app)
 
@@ -55,21 +63,17 @@ def test_health_is_public() -> None:
 
 
 def test_unauthenticated_is_rejected() -> None:
-    r = client.post("/feedback/metrics", json={"transcript": "hi"})
+    r = client.get("/interviews")
     assert r.status_code == 401, r.status_code
 
 
 def test_bad_token_is_rejected() -> None:
-    r = client.post(
-        "/feedback/metrics",
-        json={"transcript": "hi"},
-        headers={"Authorization": "Bearer not-a-real-token"},
-    )
+    r = client.get("/interviews", headers={"Authorization": "Bearer not-a-real-token"})
     assert r.status_code == 401, r.status_code
 
 
 def test_valid_token_is_accepted() -> None:
-    r = client.post("/feedback/metrics", json={"transcript": "I built a project."}, headers=_auth())
+    r = client.get("/interviews", headers=_auth())
     assert r.status_code == 200, (r.status_code, r.text)
 
 
@@ -93,11 +97,7 @@ def test_asymmetric_es256_token_is_accepted() -> None:
     original = auth_mod._jwks_client
     auth_mod._jwks_client = lambda: _FakeJWKS()  # skip the network JWKS fetch
     try:
-        r = client.post(
-            "/feedback/metrics",
-            json={"transcript": "hi"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        r = client.get("/interviews", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200, (r.status_code, r.text)
     finally:
         auth_mod._jwks_client = original

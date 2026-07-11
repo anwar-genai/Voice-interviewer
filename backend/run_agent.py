@@ -26,14 +26,31 @@ sys.path.insert(0, str(Path(__file__).parent))
 from livekit import agents
 from livekit.agents import Agent, AgentSession, ChatContext, JobContext, WorkerOptions
 from livekit.plugins import deepgram, openai, silero
+from livekit.plugins.turn_detector.english import EnglishModel
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-from app.core.config import MissingConfigError, get_settings
+from app.core.config import MissingConfigError, Settings, get_settings
 from app.llm import build_instructions, parse_room_metadata
 from app.llm.prompts import INTERVIEWER_GREETING_INSTRUCTIONS
 from app.observability import configure_logging
 from app.observability.metrics import attach_session_metrics
 
 logger = logging.getLogger("interview.agent")
+
+
+def _turn_detection(settings: Settings):
+    """Pick the end-of-utterance detector. Semantic models decide when the user
+    has actually finished a thought instead of waiting out a fixed silence.
+
+    The "english"/"multilingual" models need their files fetched once:
+        python run_agent.py download-files
+    """
+    choice = settings.turn_detection_model.lower()
+    if choice == "english":
+        return EnglishModel()
+    if choice == "multilingual":
+        return MultilingualModel()
+    return choice  # "vad" / "stt": silence- or STT-based endpointing only
 
 
 async def entrypoint(ctx: JobContext) -> None:
@@ -52,6 +69,11 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     session = AgentSession(
+        # Semantic turn detection so the agent replies as soon as you've finished
+        # a thought, instead of waiting out the full silence timeout.
+        turn_detection=_turn_detection(settings),
+        min_endpointing_delay=settings.min_endpointing_delay_seconds,
+        max_endpointing_delay=settings.max_endpointing_delay_seconds,
         vad=silero.VAD.load(),
         stt=deepgram.STT(
             model=settings.deepgram_stt_model,

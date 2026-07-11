@@ -80,6 +80,16 @@ class Settings(BaseSettings):
     # --- Agent behaviour ---------------------------------------------------
     agent_temperature: float = 0.7
 
+    # --- Turn detection / endpointing (voice turn-taking responsiveness) ----
+    # Semantic end-of-utterance model: "english" (fast, EN-only), "multilingual",
+    # or "vad"/"stt" to fall back to silence/STT endpointing only.
+    turn_detection_model: str = "english"
+    # How long to wait after you stop speaking before the agent replies. The
+    # semantic model picks within this range: min when it's confident you're
+    # done, up to max when you still sound mid-thought. Tune to mic/speaking pace.
+    min_endpointing_delay_seconds: float = 0.5
+    max_endpointing_delay_seconds: float = 4.0
+
     # --- API ---------------------------------------------------------------
     # Comma-separated in the environment: "http://localhost:5173,https://app.example.com".
     # Explicit allowlist, never "*" — the API is authenticated and CORS is enforced.

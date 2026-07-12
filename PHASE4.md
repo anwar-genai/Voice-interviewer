@@ -127,6 +127,67 @@ for this app:
 | Self-host, rest of the app stays native | Local only, on-demand | Keeps transcript data on the machine. Cost is Docker Desktop running + ~1-2GB of images + a few minutes on first pull (seconds after). |
 | Dockerize the whole app too | Full | This is just Phase 6 arriving early — an unrelated, bigger decision. If both happen, the compose files would naturally merge, but Langfuse doesn't require it. |
 
+## Post-phase discussion: what this app actually *is*, and what would make it feel more real
+
+Two questions came up while thinking about where to invest next: what
+architecture pattern does this app actually follow, and would adopting a
+fancier one (RAG, an agentic tool-calling loop) add value.
+
+**Classification.** Checked directly (grepped for tool-calling schemas,
+embeddings, vector stores, retrieval — none exist). The app is a **thin LLM
+workflow**, not RAG and not an agent in the tool-calling sense:
+
+- `extract_job` — one prompt, one structured completion, done.
+- `generate_feedback` — one prompt, one structured completion, stored.
+- the live interviewer — one completion **per conversational turn**, chained
+  by LiveKit's turn-detection loop (a real-time voice framework), not by any
+  planning the LLM does itself.
+
+Not RAG: the job posting and resume are read in full and stuffed directly
+into the prompt (bounded by `max_job_text_chars`/`max_resume_chars`), never
+chunked or retrieved via similarity search — there is no vector store, no
+embeddings, nothing to retrieve from. Not agentic in the tool-calling sense
+either: no function-calling schema anywhere, the interviewer never calls out
+to an external tool mid-conversation. `run_agent.py` builds on
+`livekit.agents.Agent`/`AgentSession` — LiveKit's own name for its real-time
+conversational framework (turn detection, interruption handling) — which is a
+different, older sense of "agent" than the ReAct/tool-calling one, and worth
+not conflating.
+
+**Would RAG or tool-calling add value today? No — and not speculatively
+later either, only if a specific need shows up:**
+
+- **RAG** earns its cost when the corpus is too big to fit in context and
+  needs searching. A resume + JD is 1-2 pages, already fits whole in the
+  prompt — retrieval would search a corpus that's already sitting entirely in
+  context, solving a problem that doesn't exist. It would start to pay off
+  if the product grew a **real interview-question bank** (retrieved by
+  role/seniority instead of the LLM inventing questions from scratch) or
+  **competency rubrics per skill** to ground feedback instead of one static
+  rubric — but that corpus doesn't exist yet, so "add RAG" isn't the next
+  step; "build reference data worth retrieving" is, and only then does
+  retrieval do anything.
+- **Tool-calling** would let the interviewer explicitly track interview phase
+  / topics-covered instead of trusting prose instructions alone — a real gap
+  (nothing code-enforces "we already asked about system design, move on").
+  But `evals/interviewer` already passes 100% on staying on-task and one
+  question at a time without it — so this is a reliability upgrade to reach
+  for *if* phase-skipping shows up as an actual complaint, not something to
+  build preemptively.
+
+**What would actually make the AI feel more real** — audited against what's
+planned (nothing on this list is in `ROADMAP.md`):
+
+| Lever | Planned? | Note |
+|---|---|---|
+| TTS voice (Cartesia instead of Deepgram Aura) | No | Biggest lever for "feels emotional" — `livekit-agents[...cartesia...]` is already an installed dependency in `requirements.txt`, just never imported in `run_agent.py`. Cheapest high-impact change on this whole list. |
+| Stronger/different LLM | No | `CEREBRAS_MODEL` is a one-line config swap, but the account's catalog is thin (`gpt-oss-120b`, `gemma-4-31b`, `zai-glm-4.7`) — Cerebras optimizes for speed, not necessarily frontier quality. A real upgrade may mean a second provider, unraised anywhere. |
+| STT model (nova-3 vs nova-2) | Half — code already branches on `"nova-3" in settings.deepgram_stt_model`, default just hasn't been switched | Accuracy is otherwise already addressed (per-interview vocabulary boosting, transcription-aware rubric — Phase 3's STT-fairness work). |
+| Interviewer persona / prompt warmth (encouragement, adaptive tone) | No | Pure prompt engineering, costs nothing to try. Feedback rubric already asks for "encouraging" tone; the live interviewer's system prompt never does. |
+| Backchanneling (brief "mm-hmm" while the candidate is still talking) | No | Would need checking whether livekit-agents 1.x supports it; currently strictly turn-based. |
+| Latency (TTFT/TTFB/EOU) | **Yes** — the one item here actually tracked | Phase 4's voice SLO checker (`evals.voice_slo`) already gates on this. |
+| Cross-session memory / continuity ("last time you struggled with X...") | Adjacent, not planned | `retake_of` linkage is flagged as missing in `PHASE3.md`'s improve-next list — related, but not the same as in-conversation personalization. |
+
 **Where this landed:** still deferred, per the shortcuts table above — no
 code changed. Recorded here so the *decision*, not just the gap, survives:
 skip Docker for now (Cloud, only against synthetic data, if tracing is

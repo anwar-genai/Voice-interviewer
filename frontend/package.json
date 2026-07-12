@@ -12,13 +12,13 @@
     "@supabase/supabase-js": "^2.110.2",
     "livekit-client": "^2.15.8",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "^19.2.7",
     "react-router-dom": "^6.30.4"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.2.79",
-    "@types/react-dom": "^18.2.25",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.1",
     "jsdom": "^29.1.1",
     "typescript": "^5.5.4",

@@ -146,7 +146,12 @@ def main() -> None:
     logger.info("Starting agent worker against %s", livekit_url)
 
     # No agent_name => automatic dispatch: the worker joins every new room.
-    agents.cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    # initialize_process_timeout: the default 10s kills the worker on Windows
+    # when the turn-detector model loads slowly (cold cache / AV scan) — the
+    # inference process gets ~4s eaten by spawn overhead alone.
+    agents.cli.run_app(
+        WorkerOptions(entrypoint_fnc=entrypoint, initialize_process_timeout=60.0)
+    )
 
 
 if __name__ == "__main__":

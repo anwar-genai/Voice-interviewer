@@ -163,6 +163,53 @@ import + `CORS_ORIGINS`, `FLY_API_TOKEN` into GitHub for push-to-deploy, and
 the acceptance test that matters — a full voice interview end-to-end on the
 deployed site.
 
+## Post-phase discussion: explaining this pipeline in an interview
+
+The 30-second version:
+
+> "The project has a CI/CD pipeline on GitHub Actions. Every push runs two
+> gates: backend — ruff linting plus a pytest suite with mocked LLM calls,
+> and frontend — component tests plus a type-checked production build.
+> There's a third, special gate: if a change touches the LLM prompts or eval
+> code, an eval suite actually scores the AI's behavior before the change can
+> merge — prompts are code, so they're tested like code. When `main` goes
+> green, the pipeline deploys automatically to Fly.io, running database
+> migrations first. Dependency updates are automated with Dependabot, and CI
+> decides whether they're safe to merge."
+
+Depth for follow-ups:
+
+- **Why mock the LLM in tests?** Unit tests must be fast, free, and
+  deterministic. But mocks can't tell you a prompt change made the AI
+  *worse* — that's the separate eval gate, and it fails **closed**: no API
+  key / no eval run means no merge, never a silent pass.
+- **Why migrations in the pipeline?** `alembic upgrade head` runs in a
+  throwaway machine before new code starts, so code and schema can't be out
+  of sync in production.
+- **What's special about deploying this app?** The voice agent is a
+  long-running stateful process holding live audio — it can't be serverless.
+  One Docker image runs as two process groups on Fly; deploys drain
+  gracefully so a live interview isn't killed mid-sentence.
+
+The war story ("tell me about a bug you debugged"):
+
+> "The day I turned CI on, it failed — a perfect works-on-my-machine bug. My
+> `package-lock.json` had been generated on Windows, and npm had only
+> recorded the Windows versions of native binaries like esbuild. My machine:
+> everything passed. CI's Linux machine: couldn't install. It took three
+> rounds to find the real root cause — npm silently seeds lock regeneration
+> from the existing `node_modules`, so every 'fix' inherited the same
+> Windows-only slant. The final fix was regenerating the lock with no
+> `node_modules` present, using the same npm major CI uses. The lesson: your
+> lock file is a contract with machines that aren't yours, and CI is the
+> only honest judge of it."
+
+Vocabulary, used correctly: *pipeline*, *gates*, *green/red builds*, *fail
+closed*, *push-to-deploy*, *eval gate*, *mocked dependencies*, *graceful
+drain*, *release command*. And the distinction: **CI** is test-on-every-push;
+**CD** is the auto-deploy — this project does both, so "CI/CD pipeline" is
+the accurate phrase.
+
 ## What to improve next (feeds Phase 7)
 
 - **Actually deploy** — everything past `git push` is runbook: Fly app +

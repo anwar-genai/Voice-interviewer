@@ -125,6 +125,43 @@ in the image at all, and the image deliberately reads no `.env`. Local Docker
 is for exactly two occasions: a one-off `docker build` after changing
 `requirements.txt`/`Dockerfile`, and reproducing a "works locally, breaks on
 Fly" discrepancy. Production is `git push` — Fly builds the image itself.
+(Docker Desktop can stay closed day-to-day; it's only needed while actually
+building an image locally.)
+
+**Is Fly a cloud or a hosting platform?** Both — a small cloud platform for
+running containers (PaaS). The spectrum: big clouds (AWS/Azure/GCP) rent
+*infrastructure* — hundreds of services, infinite knobs, real ops work.
+Simple hosts (Vercel/CF Pages) rent an *outcome* — hand over a frontend repo,
+static files get served globally, zero knobs. Fly sits in the middle: hand it
+a Docker image and it runs that image as small VMs in datacenters worldwide,
+covering what you'd otherwise assemble yourself on AWS (public URL, TLS,
+health checks, restarts, secrets, logs, metrics/Grafana, scaling) without
+trying to be a 200-service catalog. Each piece of this architecture rents
+exactly what it is:
+
+| Piece | Platform | What you're renting |
+|---|---|---|
+| API + agent worker | Fly.io | "Run my container, keep it alive" |
+| Frontend | Vercel / CF Pages | "Serve my static files" |
+| Database + auth | Supabase | "Managed Postgres + login" |
+| Voice/media routing | LiveKit Cloud | "The WebRTC hard part" |
+
+Why Fly specifically: the agent worker is a long-running process holding live
+audio sessions — it can't run on serverless that spins up per-request and
+dies. Fly's whole model is persistent machines, at a few dollars a month
+instead of a platform team. If the project later needs an in-boundary LLM for
+PII or compliance, that's when to graduate to a hyperscaler — the Dockerfile
+ports anywhere (`DEPLOYMENT.md` has the full per-cloud matrix).
+
+**What does the user provide, and when?** Nothing until a public URL is
+wanted; the repo side is complete and local dev is unaffected. That day, the
+only inputs not already in the repo are: a Fly account (card required, idles
+at a few $/month, the API machine auto-stops), *fresh* LiveKit/Cerebras/
+Deepgram keys (the rotation — local `.env` keys are treated as exposed), and
+the two Supabase values. Then the runbook: launch + secrets + deploy, Vercel
+import + `CORS_ORIGINS`, `FLY_API_TOKEN` into GitHub for push-to-deploy, and
+the acceptance test that matters — a full voice interview end-to-end on the
+deployed site.
 
 ## What to improve next (feeds Phase 7)
 

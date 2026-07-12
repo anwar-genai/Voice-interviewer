@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import _bootstrap  # noqa: E402
 from app.llm import technical_keywords  # noqa: E402
 from app.llm.prompts import FEEDBACK_PROMPT_VERSION, FEEDBACK_RUBRIC  # noqa: E402
 from app.llm.schemas import InterviewContext  # noqa: E402
@@ -57,14 +59,31 @@ def test_rubric_is_transcription_aware() -> None:
     assert FEEDBACK_PROMPT_VERSION != "feedback-v1", "prompt text changed; version must bump"
 
 
-def main() -> int:
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    for t in tests:
-        t()
-        print(f"OK  {t.__name__}")
-    print(f"\nAll {len(tests)} STT-fairness checks passed.")
-    return 0
+def test_feedback_scoring_is_name_blind(monkeypatch) -> None:
+    """The scorer must never see the candidate's name — a gender/ethnicity
+    proxy that evals/fairness showed can move scores."""
+    import app.llm.feedback as fb
+
+    seen: dict = {}
+
+    def fake_completion(**kwargs):
+        seen.update(kwargs)
+        return {
+            "strengths": [], "improvements": [], "recommendations": [],
+            "overall_score": 5, "technical_score": 5, "communication_score": 5,
+        }
+
+    monkeypatch.setattr(fb, "structured_completion", fake_completion)
+    fb.generate_feedback(
+        job={"job_title": "Backend Engineer"},
+        resume="Ayesha Khan\nEngineer with Python. Contact: ayesha.k@example.com",
+        transcript="Interviewer: Welcome, Ayesha. Candidate: I'm Ayesha Khan and I build payments APIs.",
+    )
+    prompt = seen["messages"][1]["content"]
+    assert "Ayesha" not in prompt and "Khan" not in prompt, "candidate name leaked into the scoring prompt"
+    assert "ayesha.k@example.com" not in prompt, "contact PII leaked into the scoring prompt"
+    assert "payments APIs" in prompt, "substance must survive redaction"
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_bootstrap.run_as_script(globals(), "STT-fairness"))

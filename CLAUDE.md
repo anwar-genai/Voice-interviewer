@@ -41,8 +41,14 @@ Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE3.md`.
   lifecycle status; `/feedback/generate` scores the saved transcript once and stores
   it, `/feedback/{id}` re-reads it; feedback report + history UI; groundedness guard +
   output-safety/on-task prompt hardening; feedback calibration/groundedness evals) —
-  branch `phase-3-product-loop`.
-- **Next:** Phase 4 (testing, full eval harness, deeper observability).
+  done, on `main`.
+- **Phase 4** (quality: pytest suite incl. API tests with mocked LLM; frontend Vitest
+  smoke test; full eval harness — interviewer LLM-judge, fairness counterfactuals,
+  semantic groundedness, voice SLO check, prod→eval export; **name-blind feedback
+  scoring** (the fairness eval caught scores moving 2 points on the candidate's name
+  alone); PII redaction, llm_trace logs, Sentry hook, provider-error events; CI with
+  an eval gate on prompt changes) — branch `phase-4-quality`.
+- **Next:** Phase 5 (frontend maturity).
 
 Work is phase-by-phase per `ROADMAP.md`, one commit per phase; non-phase fixes
 (like turn-detection) get their own branch off `main`.
@@ -63,13 +69,16 @@ cd backend && python -m alembic revision --autogenerate -m "msg"   # after model
 cd backend && python -m app.db.retention              # purge expired interviews (cron target)
 
 # Checks
-cd backend && python tests/test_phase1_security.py   # 8 security checks
-cd backend && python tests/test_persistence.py       # ownership, cascade erasure, retention
-cd backend && python tests/test_phase3.py            # transcript capture, feedback wiring, groundedness
-cd backend && python tests/test_stt_fairness.py      # STT keyword mining + transcription-aware rubric
-cd backend && python -m evals.runner extraction      # eval suite (calls Cerebras)
-cd backend && python -m evals.runner feedback        # calibration + groundedness (calls Cerebras)
+cd backend && python -m pytest -q          # full test suite (mocked LLM + SQLite; each tests/*.py also runs standalone)
+cd frontend && npm test                    # Vitest smoke test
+cd backend && python -m evals.runner       # eval suites (call Cerebras): extraction, interviewer, feedback, fairness
+cd backend && python -m evals.voice_slo agent.log    # voice SLOs (p95 latency) from a captured worker log
+cd backend && python -m evals.export_prod  # prod->eval export (PII-redacted, output gitignored)
 ```
+
+CI (`.github/workflows/`): `ci.yml` runs backend pytest + frontend test/build on every
+push/PR; `evals.yml` gates changes to `app/llm/**` or `evals/**` on the eval suites
+(needs the `CEREBRAS_API_KEY` repo secret — without it the gate fails closed).
 
 ## Gotchas / config that bites
 
@@ -100,6 +109,11 @@ cd backend && python -m evals.runner feedback        # calibration + groundednes
 - **Secrets.** Real provider keys sit in `backend/.env` (gitignored). Phase 1 flagged:
   rotate them and move to a platform vault before deploying. `env.example` files list
   every setting.
+- **Evals & error tracking.** The LLM judge (`EVAL_JUDGE_MODEL`, default
+  `zai-glm-4.7`) must exist on your Cerebras account — models come and go, and a
+  404 means "pick another from `GET /v1/models`". Sentry is dormant until
+  `SENTRY_DSN` is set; once set, every `logger.error`/`exception` (LLM failures,
+  worker `provider_error` events) becomes an alerting event.
 - **Style:** minimal / no speculative abstractions (ponytail). Deliberate shortcuts
   are marked with `ponytail:` comments naming the ceiling + upgrade path.
 ```

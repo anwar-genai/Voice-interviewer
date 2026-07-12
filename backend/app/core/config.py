@@ -105,6 +105,18 @@ class Settings(BaseSettings):
     vad_activation_threshold: float = 0.5
     min_interruption_duration_seconds: float = 0.5
 
+    # --- Evals ---------------------------------------------------------------
+    # Judge for LLM-judge evals: a different model family from the one being
+    # judged, so the grader doesn't share the graded model's blind spots.
+    # ponytail: same provider (one API key, zero new accounts); point this at a
+    # stronger external judge via env when an account for one exists.
+    eval_judge_model: str = "zai-glm-4.7"
+
+    # --- Error tracking ------------------------------------------------------
+    # Set to a Sentry DSN to report errors from the API and the agent worker
+    # (that's what makes provider errors page someone). Off when unset.
+    sentry_dsn: str | None = None
+
     # --- API ---------------------------------------------------------------
     # Comma-separated in the environment: "http://localhost:5173,https://app.example.com".
     # Explicit allowlist, never "*" — the API is authenticated and CORS is enforced.

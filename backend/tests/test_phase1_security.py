@@ -6,43 +6,23 @@ Also discoverable by pytest.
 
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
 
-# Configure a known auth secret and a tiny rate limit BEFORE importing the app.
-SECRET = "test-jwt-secret"
-# The auth probe is GET /interviews (a real DB-backed route), so the suite needs
-# actual tables: a throwaway SQLite file works across the TestClient's threads
-# where :memory: would not.
-_DB_PATH = Path(tempfile.gettempdir()) / "vi_test_security.db"
-_DB_PATH.unlink(missing_ok=True)
-os.environ.update(
-    AUTH_ENABLED="true",
-    SUPABASE_JWT_SECRET=SECRET,
-    SUPABASE_URL="https://example.supabase.co",
-    RATE_LIMIT_PER_MINUTE="3",
-    DATABASE_URL=f"sqlite:///{_DB_PATH.as_posix()}",
-)
+import _bootstrap  # noqa: E402
+
+_bootstrap.bootstrap()  # env + throwaway DB, BEFORE importing the app
 
 import jwt  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.core.config import get_settings  # noqa: E402
-
-get_settings.cache_clear()  # drop any cached settings from a prior import
-
-from app.db import Base  # noqa: E402
-from app.db.session import _engine  # noqa: E402
 from app.llm.prompts import _isolate, build_feedback_messages  # noqa: E402
 from app.main import app  # noqa: E402
 
-Base.metadata.create_all(_engine())
-
+SECRET = _bootstrap.TEST_JWT_SECRET
 client = TestClient(app)
 
 
@@ -134,14 +114,5 @@ def test_prompt_injection_delimiters_are_stripped() -> None:
     assert user_turn.count("</interview_transcript>") == 1
 
 
-def main() -> int:
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    for t in tests:
-        t()
-        print(f"OK  {t.__name__}")
-    print(f"\nAll {len(tests)} security checks passed.")
-    return 0
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_bootstrap.run_as_script(globals(), "security"))

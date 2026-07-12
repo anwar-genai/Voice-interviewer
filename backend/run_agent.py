@@ -34,7 +34,8 @@ from app.db.transcript import attach_transcript_capture
 from app.llm import build_instructions, parse_room_metadata, technical_keywords
 from app.llm.prompts import INTERVIEWER_GREETING_INSTRUCTIONS
 from app.observability import configure_logging
-from app.observability.metrics import attach_session_metrics
+from app.observability.errors import init_error_reporting
+from app.observability.metrics import attach_error_events, attach_session_metrics
 
 logger = logging.getLogger("interview.agent")
 
@@ -107,6 +108,8 @@ async def entrypoint(ctx: JobContext) -> None:
 
     # Per-turn latency now; a usage + cost summary when the session ends.
     attach_session_metrics(session, ctx, room_name=ctx.room.name)
+    # STT/LLM/TTS failures become alerting provider_error events.
+    attach_error_events(session, room_name=ctx.room.name)
 
     # Persist each turn + the interview's lifecycle status (created -> in_progress
     # -> completed/dropped) so it survives the session and can be scored.
@@ -128,6 +131,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
 def main() -> None:
     configure_logging()
+    init_error_reporting("agent-worker")
     settings = get_settings()
 
     try:

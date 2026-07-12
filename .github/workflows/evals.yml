@@ -1,0 +1,32 @@
+# Prompts are code: any change to the LLM core or the eval harness must pass
+# the eval suites before it merges. Needs the CEREBRAS_API_KEY repo secret —
+# absent, the run fails closed rather than green-lighting unmeasured prompts.
+name: Evals
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/llm/**"
+      - "backend/evals/**"
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/llm/**"
+      - "backend/evals/**"
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m evals.runner
+        env:
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}

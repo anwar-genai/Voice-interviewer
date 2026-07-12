@@ -19,3 +19,7 @@ cerebras-cloud-sdk>=1.2,<2
 # CORS if needed later
 starlette>=0.37,<1
 python-multipart>=0.0.9
+
+# Error tracking (active only when SENTRY_DSN is set)
+sentry-sdk>=2,<4
+

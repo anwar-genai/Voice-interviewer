@@ -56,6 +56,26 @@ def _latency_fields(m: Any) -> dict[str, float] | None:
     return None
 
 
+def attach_error_events(session: AgentSession, *, room_name: str) -> None:
+    """Log a structured ``provider_error`` event for every STT/LLM/TTS failure.
+
+    ERROR level means Sentry (when configured) turns each one into an alerting
+    event — that is the "provider errors page someone" wire.
+    """
+
+    @session.on("error")
+    def _on_error(ev: Any) -> None:
+        err = getattr(ev, "error", ev)
+        source = getattr(ev, "source", None)
+        logger.error(
+            "provider_error room=%s source=%s recoverable=%s error=%s",
+            room_name,
+            type(source).__name__ if source is not None else "unknown",
+            getattr(err, "recoverable", None),
+            err,
+        )
+
+
 def attach_session_metrics(
     session: AgentSession, ctx: JobContext, *, room_name: str
 ) -> metrics.UsageCollector:

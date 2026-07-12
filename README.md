@@ -4,6 +4,20 @@ A production-ready real-time interview practice agent using FastAPI backend and 
 
 Reference: Interviewer Voice Agent with LiveKit (Cerebras) — see the Cookbook page: `https://inference-docs.cerebras.ai/cookbook/agents/livekit`.
 
+### 🎯 Intended use: coaching, not screening
+
+This tool helps candidates *practice*. It is not a hiring tool:
+
+- Feedback scores are AI-generated coaching signals for the candidate's own use.
+  They must not be used to screen, rank, or make employment decisions.
+- Scoring is **name-blind** — the candidate's name is redacted before the model
+  sees the transcript — and the rubric forbids judging protected
+  characteristics, accent, or non-native phrasing. `backend/evals/fairness`
+  enforces both on every prompt change.
+- The interviewer and the feedback are AI-generated; the transcript is automatic
+  speech recognition and may contain errors, which the scorer is instructed to
+  treat as transcription artifacts, never candidate mistakes.
+
 ### ✨ Features
 - **Real-time Voice Interviews**: Conduct mock interviews with AI interviewer
 - **AI-Powered Feedback**: Get detailed performance analysis and improvement suggestions

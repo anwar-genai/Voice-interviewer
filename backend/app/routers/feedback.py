@@ -27,6 +27,7 @@ from ..llm import (
     generate_feedback,
     require_groundable_transcript,
 )
+from ..observability.tracing import current_interview_id
 from .interviews import owned_or_404
 
 logger = logging.getLogger("interview.feedback")
@@ -93,6 +94,7 @@ def generate_interview_feedback(
 ):
     """Score a completed interview against the feedback rubric, once, and store it."""
     iv = owned_or_404(db, request.interview_id, user_id)
+    current_interview_id.set(iv.id)  # correlate this request's llm_trace lines
     if iv.feedback is not None:
         return _as_feedback(iv.feedback)  # idempotent: don't re-bill the LLM
 

@@ -14,12 +14,16 @@ from collections.abc import Callable
 from app.observability import configure_logging
 
 from .extraction import eval_extraction
+from .fairness import eval_fairness
 from .feedback import eval_feedback
 from .harness import SuiteResult, print_report
+from .interviewer import eval_interviewer
 
 SUITES: dict[str, Callable[[], SuiteResult]] = {
     "extraction": eval_extraction.run,
+    "interviewer": eval_interviewer.run,
     "feedback": eval_feedback.run,
+    "fairness": eval_fairness.run,
 }
 
 

@@ -18,6 +18,19 @@ from .errors import InvalidInputError
 MIN_CANDIDATE_WORDS = 20
 
 
+def candidate_names(resume: str) -> list[str]:
+    """The candidate's name tokens, mined from the resume's first non-empty
+    line (the same heuristic the STT vocabulary miner uses).
+
+    Feedback scoring redacts these before the model sees the transcript: a name
+    is a gender/ethnicity proxy with zero coaching signal, and the fairness
+    evals showed scores moving with it (`evals/fairness`).
+    """
+    first = next((ln.strip() for ln in resume.splitlines() if ln.strip()), "")
+    tokens = [t for t in first.split() if t.isalpha()]
+    return tokens if 0 < len(tokens) <= 5 else []
+
+
 def require_groundable_transcript(candidate_text: str) -> None:
     """Raise if the candidate said too little to give grounded feedback."""
     if len(candidate_text.split()) < MIN_CANDIDATE_WORDS:

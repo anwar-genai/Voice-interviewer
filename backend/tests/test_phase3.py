@@ -18,6 +18,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _bootstrap  # noqa: E402
 
 from sqlalchemy import create_engine, func, select  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
@@ -217,37 +220,5 @@ def test_sweeper_marks_stale_in_progress_dropped() -> None:
     assert status == {"stale": "dropped", "live": "in_progress", "done": "completed"}, status
 
 
-# --- minimal monkeypatch shim (no pytest dependency) -----------------------
-
-class _MonkeyPatch:
-    def __init__(self) -> None:
-        self._undo: list = []
-
-    def setattr(self, target, name, value) -> None:
-        old = getattr(target, name)
-        self._undo.append((target, name, old))
-        setattr(target, name, value)
-
-    def undo(self) -> None:
-        for target, name, old in reversed(self._undo):
-            setattr(target, name, old)
-
-
-def main() -> int:
-    tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    for name, fn in tests:
-        mp = _MonkeyPatch()
-        try:
-            if fn.__code__.co_argcount:
-                fn(mp)
-            else:
-                fn()
-        finally:
-            mp.undo()
-        print(f"OK  {name}")
-    print(f"\nAll {len(tests)} Phase 3 checks passed.")
-    return 0
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_bootstrap.run_as_script(globals(), "Phase 3"))

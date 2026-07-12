@@ -6,12 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import get_settings
 from .deps import include_routers
 from .observability import configure_logging
+from .observability.errors import init_error_reporting
 
 logger = logging.getLogger("interview.api")
 
 
 def create_app() -> FastAPI:
     configure_logging()
+    init_error_reporting("api")
     settings = get_settings()
 
     if not settings.auth_enabled:

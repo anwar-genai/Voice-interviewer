@@ -1,0 +1,11 @@
+# Secrets must never enter the build context.
+.env
+
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+evals/
+Dockerfile
+fly.toml

@@ -28,7 +28,7 @@ frontend/src/    Vite + React; ui/App.tsx is the main component, lib/supabase.ts
 
 Plan & rationale: `ROADMAP.md` (by phase), `CROSS_CUTTING.md` (by concern:
 security/privacy/safety/evals/o11y), `DEPLOYMENT.md` (how to ship).
-Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE5.md`.
+Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE6.md`.
 
 ## Status
 
@@ -55,7 +55,14 @@ Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE5.md`.
   reconnection handling; self-serve data-deletion UI + AI-transparency; a11y + mobile;
   component + api tests; **"On Air" visual redesign** — pine/amber identity with
   waveform / VU-meter / score-ring canvas instruments) — done, on `main`.
-- **Next:** Phase 6 (deployment & DevOps).
+- **Phase 6** (deployment & DevOps: one backend Docker image — API + worker as two
+  Fly process groups in `backend/fly.toml` — with health checks, graceful drain,
+  worker Prometheus→Grafana metrics, and Alembic migrations as the release command;
+  frontend stays static (Vercel/CF Pages, no container); CI gains ruff + tsc gates,
+  a push-to-deploy job (skips until `FLY_API_TOKEN` exists), and Dependabot) — done.
+  **The one-time account setup (Fly launch, secrets + key rotation, Vercel import)
+  is a runbook the user executes** — see `DEPLOYMENT.md` § Runbook.
+- **Next:** first real deploy (runbook above), then Phase 7 (scale, cost & compliance).
 
 Work is phase-by-phase per `ROADMAP.md`, one commit per phase; non-phase fixes
 (like turn-detection) get their own branch off `main`.
@@ -81,11 +88,19 @@ cd frontend && npm test                    # Vitest smoke test
 cd backend && python -m evals.runner       # eval suites (call Cerebras): extraction, interviewer, feedback, fairness
 cd backend && python -m evals.voice_slo agent.log    # voice SLOs (p95 latency) from a captured worker log
 cd backend && python -m evals.export_prod  # prod->eval export (PII-redacted, output gitignored)
+
+# Lint + deploy (see DEPLOYMENT.md § Runbook for one-time setup)
+cd backend && ruff check .                 # same gate CI runs
+cd backend && docker build -t voice-interviewer .   # verify the image locally
+cd backend && fly deploy                   # API + worker; migrations run first
 ```
 
-CI (`.github/workflows/`): `ci.yml` runs backend pytest + frontend test/build on every
-push/PR; `evals.yml` gates changes to `app/llm/**` or `evals/**` on the eval suites
+CI (`.github/workflows/`): `ci.yml` runs backend ruff+pytest + frontend test/build
+(`npm run build` now type-checks via `tsc --noEmit`) on every push/PR, then deploys
+`main` to Fly — the deploy step skips cleanly until the `FLY_API_TOKEN` repo secret
+exists; `evals.yml` gates changes to `app/llm/**` or `evals/**` on the eval suites
 (needs the `CEREBRAS_API_KEY` repo secret — without it the gate fails closed).
+Dependabot files weekly dependency-update PRs (pip / npm / actions).
 
 ## Gotchas / config that bites
 
@@ -111,11 +126,13 @@ push/PR; `evals.yml` gates changes to `app/llm/**` or `evals/**` on the eval sui
   be `postgresql+psycopg://` (psycopg3). Keep the DB password alphanumeric — symbols
   like `@ % :` are URL-reserved and corrupt the connection string. Migrations are
   Alembic; owner = the Supabase user id, so there's no `users` table.
-- **Rate limiting** is in-process (per-user, per-minute) — fine for one worker; needs
-  Redis when the API scales to multiple workers (Phase 6). See `app/core/ratelimit.py`.
-- **Secrets.** Real provider keys sit in `backend/.env` (gitignored). Phase 1 flagged:
-  rotate them and move to a platform vault before deploying. `env.example` files list
-  every setting.
+- **Rate limiting** is in-process (per-user, per-minute) — why `fly.toml` keeps the
+  API at one machine. Move to Redis (Upstash) before scaling `api` past 1. See
+  `app/core/ratelimit.py`.
+- **Secrets.** Real provider keys sit in `backend/.env` (gitignored; `.dockerignore`
+  keeps it out of images). Phase 1 flagged: those local keys count as exposed —
+  generate fresh ones when you run `fly secrets set` (DEPLOYMENT.md runbook step 2).
+  `env.example` files list every setting.
 - **Evals & error tracking.** The LLM judge (`EVAL_JUDGE_MODEL`, default
   `zai-glm-4.7`) must exist on your Cerebras account — models come and go, and a
   404 means "pick another from `GET /v1/models`". Sentry is dormant until

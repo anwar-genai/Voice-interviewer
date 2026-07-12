@@ -153,8 +153,13 @@ def main() -> None:
     # initialize_process_timeout: the default 10s kills the worker on Windows
     # when the turn-detector model loads slowly (cold cache / AV scan) — the
     # inference process gets ~4s eaten by spawn overhead alone.
+    # In `start` (prod) mode the worker also serves a health check on :8081 and,
+    # when PROMETHEUS_PORT is set, Prometheus metrics on that port at /metrics.
+    extra: dict = {}
+    if settings.prometheus_port:
+        extra["prometheus_port"] = settings.prometheus_port
     agents.cli.run_app(
-        WorkerOptions(entrypoint_fnc=entrypoint, initialize_process_timeout=60.0)
+        WorkerOptions(entrypoint_fnc=entrypoint, initialize_process_timeout=60.0, **extra)
     )
 
 

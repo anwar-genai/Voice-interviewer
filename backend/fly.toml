@@ -1,0 +1,74 @@
+# Fly.io config: one app, one image, two process groups (API + agent worker).
+# Deploy: fly deploy  (from backend/; see DEPLOYMENT.md runbook)
+# App names are global on Fly — change this if taken.
+app = "voice-interviewer"
+primary_region = "iad"
+
+# Grace period on deploy/stop before SIGKILL. 5m is Fly's max — a live interview
+# gets that long to finish (the worker's own drain_timeout is larger and moot).
+# Deploy when idle if that ceiling matters.
+kill_timeout = "5m"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Migrations run in a throwaway machine (with secrets) before new code starts.
+  release_command = "python -m alembic upgrade head"
+
+[env]
+  LOG_LEVEL = "INFO"
+  PROMETHEUS_PORT = "9464"
+
+[processes]
+  api = "uvicorn uvicorn_app:app --host 0.0.0.0 --port 8000"
+  worker = "python run_agent.py start"
+
+[http_service]
+  processes = ["api"]
+  internal_port = 8000
+  force_https = true
+  # The API can scale to zero between uses; the worker never stops (it holds
+  # the LiveKit websocket and live audio sessions).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+# Worker health: livekit-agents serves a health endpoint on :8081 in start mode.
+[checks.worker_alive]
+  processes = ["worker"]
+  type = "http"
+  port = 8081
+  path = "/"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "60s"  # covers VAD + turn-detector model load
+
+# Fly scrapes these into its managed Prometheus; dashboards at fly-metrics.net.
+[[metrics]]
+  processes = ["worker"]
+  port = 9464
+  path = "/metrics"
+
+[[vm]]
+  processes = ["api"]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
+[[vm]]
+  processes = ["worker"]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+# ponytail: one machine per group, no autoscaling. The worker reports its own
+# load (load_threshold=0.7 in start mode) and LiveKit stops dispatching to a
+# busy one — scaling is `fly scale count worker=N`, manual, when concurrent
+# interviews actually collide. Rate limiting is in-process, so keep api at 1
+# machine until Redis replaces it (see app/core/ratelimit.py).

@@ -117,6 +117,11 @@ class Settings(BaseSettings):
     # (that's what makes provider errors page someone). Off when unset.
     sentry_dsn: str | None = None
 
+    # --- Metrics export -------------------------------------------------------
+    # When set, the agent worker serves Prometheus metrics on :{port}/metrics
+    # (scraped by the platform, e.g. Fly.io -> fly-metrics.net Grafana). Off when unset.
+    prometheus_port: int | None = None
+
     # --- API ---------------------------------------------------------------
     # Comma-separated in the environment: "http://localhost:5173,https://app.example.com".
     # Explicit allowlist, never "*" — the API is authenticated and CORS is enforced.

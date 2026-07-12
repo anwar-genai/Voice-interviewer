@@ -55,6 +55,72 @@ in-boundary LLMs for PII, existing-cloud commitments, or large scale.
 
 ---
 
+## Runbook (Phase 6 — the recommended path, concretely)
+
+The repo ships deploy-ready: `backend/Dockerfile` (one image for API + worker),
+`backend/fly.toml` (two process groups, health checks, metrics), and a CI deploy
+job that runs on every push to `main` once the secret exists.
+
+### One-time setup
+
+```bash
+# 1. Fly app (from backend/ so it picks up fly.toml)
+cd backend
+fly launch --no-deploy          # accept the existing fly.toml; rename app if taken
+
+# 2. Secrets — this is also the key-rotation moment Phase 1 flagged:
+#    generate FRESH keys in each provider's dashboard (the local .env ones are
+#    considered exposed), and set them only here. Never `fly deploy` from a
+#    machine where .env could leak into the context (.dockerignore blocks it).
+fly secrets set \
+  LIVEKIT_URL=wss://<project>.livekit.cloud \
+  LIVEKIT_API_KEY=... LIVEKIT_API_SECRET=... \
+  CEREBRAS_API_KEY=... DEEPGRAM_API_KEY=... \
+  SUPABASE_URL=https://<project>.supabase.co \
+  DATABASE_URL='postgresql+psycopg://...pooler.supabase.com:5432/postgres' \
+  CORS_ORIGINS=https://<your-frontend-domain> \
+  SENTRY_DSN=...                # optional but do it — errors page no one without it
+
+# 3. First deploy (migrations run automatically as the release command)
+fly deploy
+
+# 4. Frontend: import the repo into Vercel or Cloudflare Pages,
+#    root directory = frontend/, build = npm run build, output = dist/.
+#    Env vars: VITE_API_BASE=https://<fly-app>.fly.dev
+#              VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY
+#    Then make sure CORS_ORIGINS (step 2) matches the domain it gives you.
+
+# 5. Push-to-deploy: add FLY_API_TOKEN to GitHub repo secrets
+fly tokens create deploy        # -> Settings -> Secrets -> Actions -> FLY_API_TOKEN
+
+# 6. Retention purge (cron target) — a scheduled machine on the same image:
+fly machine run . --schedule daily "python -m app.db.retention"
+```
+
+### What you get
+
+- **Health checks:** API `GET /health`; worker `GET :8081/` (built into
+  `livekit-agents` start mode). Fly restarts what fails them.
+- **Graceful drain:** deploys send SIGTERM and wait `kill_timeout` (5m, Fly's
+  max) so live interviews can finish; the worker stops accepting new rooms
+  immediately. Interviews longer than 5m at deploy time get cut — deploy idle.
+- **Dashboards:** worker Prometheus metrics on :9464 are scraped by Fly →
+  https://fly-metrics.net (managed Grafana), plus `fly logs` for both processes.
+- **TLS/edge:** automatic on Fly and the static host; CORS stays enforced
+  in-app from `CORS_ORIGINS`.
+- **Dependency scanning:** Dependabot PRs weekly (pip, npm, GitHub Actions);
+  CI + the evals gate decide if an update is safe.
+
+### Scaling ceilings (deliberate, documented)
+
+- One `api` machine — rate limiting is in-process (`app/core/ratelimit.py`);
+  move it to Upstash Redis before `fly scale count api=2+`.
+- One `worker` machine ≈ a handful of concurrent interviews (it reports
+  load and LiveKit stops dispatching at 0.7); `fly scale count worker=N`
+  when sessions actually collide.
+
+---
+
 ## Component × platform matrix
 
 | Need | Self-host / OSS | AWS | Azure | GCP |

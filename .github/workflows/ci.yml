@@ -18,6 +18,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check .
       - run: python -m pytest -q
 
   frontend:
@@ -34,4 +35,24 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm test
-      - run: npm run build
+      - run: npm run build # runs tsc --noEmit first (the type gate)
+
+  # Push-to-deploy: main -> Fly (API + agent worker; migrations run as the
+  # release command). Skips cleanly until the FLY_API_TOKEN secret exists.
+  # The frontend deploys itself via the static host's git integration.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy to Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "FLY_API_TOKEN not set — skipping deploy (see DEPLOYMENT.md runbook)."
+            exit 0
+          fi
+          flyctl deploy --remote-only -c backend/fly.toml

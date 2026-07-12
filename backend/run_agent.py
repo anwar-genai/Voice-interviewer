@@ -15,6 +15,7 @@ This file is transport only. What the interviewer is *told* lives in `app/llm/`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -122,6 +123,29 @@ async def entrypoint(ctx: JobContext) -> None:
 
     logger.info("Starting agent session...")
     await session.start(agent=agent, room=ctx.room)
+
+    # Cost control: hard cap on interview length. The agent says goodbye, then
+    # the room is deleted, which disconnects the candidate and ends the session
+    # (the close handler in transcript.py marks the interview completed).
+    async def _time_limit(minutes: int) -> None:
+        await asyncio.sleep(minutes * 60)
+        logger.info("interview_time_limit room=%s minutes=%d", ctx.room.name, minutes)
+        try:
+            await session.generate_reply(
+                instructions=(
+                    "The scheduled interview time is up. In one or two sentences, thank "
+                    "the candidate warmly, tell them their feedback report is ready, and "
+                    "say goodbye. Do not ask another question."
+                )
+            )
+            await ctx.delete_room()
+        except Exception:  # session already closed (candidate left first) — nothing to end
+            logger.debug("Time-limit teardown skipped for room=%s", ctx.room.name, exc_info=True)
+
+    if settings.max_interview_minutes > 0:
+        # The job process dies with the room, taking this task with it if the
+        # interview ends early.
+        asyncio.create_task(_time_limit(settings.max_interview_minutes))
 
     # Kick off the interview. generate_reply() speaks the result automatically;
     # after this the framework handles every subsequent user turn on its own.

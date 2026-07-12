@@ -34,6 +34,8 @@ def bootstrap() -> None:
         SUPABASE_JWT_SECRET=TEST_JWT_SECRET,
         SUPABASE_URL="https://example.supabase.co",
         RATE_LIMIT_PER_MINUTE="3",
+        DAILY_INTERVIEW_LIMIT="2",
+        MAX_CONCURRENT_INTERVIEWS="3",
         DATABASE_URL=f"sqlite:///{DB_PATH.as_posix()}",
     )
 

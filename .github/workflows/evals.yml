@@ -13,6 +13,11 @@ on:
     paths:
       - "backend/app/llm/**"
       - "backend/evals/**"
+  schedule:
+    # Monthly bias audit (RESPONSIBLE_AI.md): the same suites — including the
+    # fairness counterfactuals — re-run on an *unchanged* codebase, because the
+    # hosted model behind the prompts can drift on its own. Red = treat as a bug.
+    - cron: "0 6 1 * *"
 
 jobs:
   evals:

@@ -42,7 +42,19 @@ export const Settings: React.FC = () => {
         <h3 className="preview-title">What we keep</h3>
         <p>
           Per interview: the parsed job details, your résumé text, the conversation transcript, and the
-          generated feedback — all tied to your account and visible only to you.
+          generated feedback — all tied to your account and visible only to you. Everything is
+          deleted automatically after 30 days.
+        </p>
+        <p>
+          The full picture lives in the{' '}
+          <a href="https://github.com/anwar-genai/Voice-interviewer/blob/main/PRIVACY.md" target="_blank" rel="noreferrer">
+            privacy policy
+          </a>{' '}
+          (what's stored, which providers process it, retention) and the{' '}
+          <a href="https://github.com/anwar-genai/Voice-interviewer/blob/main/RESPONSIBLE_AI.md" target="_blank" rel="noreferrer">
+            responsible-AI policy
+          </a>{' '}
+          (coaching-not-screening, bias audits, known limitations).
         </p>
       </div>
 

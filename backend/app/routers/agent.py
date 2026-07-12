@@ -2,16 +2,17 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from livekit import api as lk_api
 from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..core.config import MissingConfigError, get_settings
+from ..core.config import MissingConfigError, Settings, get_settings
 from ..core.ratelimit import rate_limit
 from ..db import get_db
 from ..db.models import Interview
@@ -28,6 +29,50 @@ class JoinTokenRequest(BaseModel):
     resume: str | None = None
     # The candidate must consent to voice recording + resume processing to start.
     consent: bool = False
+
+
+def _enforce_cost_limits(db: Session, user_id: str, settings: Settings) -> None:
+    """Cost controls (Phase 7): bound spend *before* a room or LLM call exists.
+
+    Three COUNTs on the interviews table — DB-backed, so unlike the in-process
+    rate limiter they survive restarts and hold across machines. "Active" rows
+    age out of a time window instead of blocking forever (a crashed worker or a
+    never-joined room strands status at created/in_progress; retention also
+    sweeps those, but the window makes the check self-healing).
+
+    Order matters: user-specific rejections (409/429) come before the global
+    capacity check, so one user's verdict never depends on everyone else's load.
+    """
+    now = datetime.now(timezone.utc)
+    window = now - timedelta(minutes=(settings.max_interview_minutes or 60) + 15)
+    active = (
+        Interview.status.in_(("created", "in_progress")),
+        Interview.updated_at >= window,
+    )
+
+    def count(*where: Any) -> int:
+        return db.scalar(select(func.count()).select_from(Interview).where(*where)) or 0
+
+    if count(Interview.user_id == user_id, *active):
+        raise HTTPException(
+            status_code=409, detail="You already have an interview in progress — finish it first."
+        )
+
+    started_today = count(
+        Interview.user_id == user_id,
+        Interview.created_at >= now.replace(hour=0, minute=0, second=0, microsecond=0),
+    )
+    if started_today >= settings.daily_interview_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily interview limit reached ({settings.daily_interview_limit} per day) — try again tomorrow.",
+        )
+
+    if count(*active) >= settings.max_concurrent_interviews:
+        raise HTTPException(
+            status_code=503,
+            detail="All interview slots are in use right now — try again in a few minutes.",
+        )
 
 
 @router.post("/join-token")
@@ -49,6 +94,8 @@ async def create_join_token(
         )
 
     settings = get_settings()
+    _enforce_cost_limits(db, user_id, settings)
+
     try:
         livekit_url, api_key, api_secret = settings.require_livekit()
     except MissingConfigError:

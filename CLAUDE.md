@@ -28,7 +28,9 @@ frontend/src/    Vite + React; ui/App.tsx is the main component, lib/supabase.ts
 
 Plan & rationale: `ROADMAP.md` (by phase), `CROSS_CUTTING.md` (by concern:
 security/privacy/safety/evals/o11y), `DEPLOYMENT.md` (how to ship).
-Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE6.md`.
+Policies: `PRIVACY.md` (data, subprocessors/DPAs, residency), `RESPONSIBLE_AI.md`
+(intended use, AI-regulation posture, bias audits).
+Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE7.md`.
 
 ## Status
 
@@ -62,7 +64,16 @@ Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE6.md`.
   a push-to-deploy job (skips until `FLY_API_TOKEN` exists), and Dependabot) — done.
   **The one-time account setup (Fly launch, secrets + key rotation, Vercel import)
   is a runbook the user executes** — see `DEPLOYMENT.md` § Runbook.
-- **Next:** first real deploy (runbook above), then Phase 7 (scale, cost & compliance).
+- **Phase 7** (scale, cost & compliance: DB-backed cost gates on `/agent/join-token`
+  — daily per-user quota → 429, one-active-interview → 409, global concurrency →
+  503 — plus a worker-side session time limit (agent says goodbye, deletes the room)
+  and a repeat-JD extraction cache; `PRIVACY.md` — policy + subprocessor/DPA table +
+  residency posture; `RESPONSIBLE_AI.md` — intended use, EU AI Act/EEOC posture,
+  safeguards→code map; monthly scheduled bias-audit run in `evals.yml`; policies
+  linked from the Settings screen) — done, on `main`. Skipped teams/multi-tenancy
+  (no team concept in the product) and Redis (API still pinned to one machine).
+- **Next:** first real deploy (runbook above). The roadmap's build phases are
+  complete; Phase 7's compliance items stay "ongoing" by nature (audits, DPA upkeep).
 
 Work is phase-by-phase per `ROADMAP.md`, one commit per phase; non-phase fixes
 (like turn-detection) get their own branch off `main`.
@@ -128,7 +139,12 @@ Dependabot files weekly dependency-update PRs (pip / npm / actions).
   Alembic; owner = the Supabase user id, so there's no `users` table.
 - **Rate limiting** is in-process (per-user, per-minute) — why `fly.toml` keeps the
   API at one machine. Move to Redis (Upstash) before scaling `api` past 1. See
-  `app/core/ratelimit.py`.
+  `app/core/ratelimit.py`. The extraction cache in `app/routers/utils.py` shares this
+  one-machine constraint; the Phase 7 cost gates do **not** (they're DB counts).
+- **Cost controls.** Unexpected 429/409/503 from `/agent/join-token` while testing =
+  `DAILY_INTERVIEW_LIMIT` (10/user/day, resets midnight UTC), one-active-interview-
+  per-user, or `MAX_CONCURRENT_INTERVIEWS` (10 global). The agent ends sessions at
+  `MAX_INTERVIEW_MINUTES` (30; 0 disables). All tunable in `.env`.
 - **Secrets.** Real provider keys sit in `backend/.env` (gitignored; `.dockerignore`
   keeps it out of images). Phase 1 flagged: those local keys count as exposed —
   generate fresh ones when you run `fly secrets set` (DEPLOYMENT.md runbook step 2).

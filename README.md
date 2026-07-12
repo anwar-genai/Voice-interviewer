@@ -18,6 +18,10 @@ This tool helps candidates *practice*. It is not a hiring tool:
   speech recognition and may contain errors, which the scorer is instructed to
   treat as transcription artifacts, never candidate mistakes.
 
+Full policies: [`RESPONSIBLE_AI.md`](RESPONSIBLE_AI.md) (intended use, EU AI Act /
+EEOC posture, bias-audit cadence) · [`PRIVACY.md`](PRIVACY.md) (data collected,
+subprocessors & DPAs, retention, residency).
+
 ### ✨ Features
 - **Real-time Voice Interviews**: Conduct mock interviews with AI interviewer
 - **AI-Powered Feedback**: Get detailed performance analysis and improvement suggestions

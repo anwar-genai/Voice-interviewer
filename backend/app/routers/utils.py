@@ -1,3 +1,4 @@
+import hashlib
 import io
 import logging
 
@@ -87,12 +88,33 @@ def _extract_job_or_http_error(posting_text: str) -> ParsedJob:
         raise HTTPException(status_code=502, detail="Extraction service failed")
 
 
+# Cost control: re-practicing the same job is the product's core loop, and every
+# repeat parse of an identical JD was a paid LLM call. Successful extractions are
+# cached by input hash; failures are never cached.
+# ponytail: in-process dict, cleared when full — fine for the one API machine
+# fly.toml pins; move to Redis alongside the rate limiter if the API scales out.
+_extract_cache: dict[str, ParsedJob] = {}
+_EXTRACT_CACHE_MAX = 256
+
+
+def _extract_job_cached(posting_text: str) -> ParsedJob:
+    key = hashlib.sha256(posting_text.encode()).hexdigest()
+    hit = _extract_cache.get(key)
+    if hit is not None:
+        return hit
+    result = _extract_job_or_http_error(posting_text)
+    if len(_extract_cache) >= _EXTRACT_CACHE_MAX:
+        _extract_cache.clear()
+    _extract_cache[key] = result
+    return result
+
+
 @router.post("/parse-job-text-llm", response_model=ParsedJob)
 def parse_job_text_llm(body: ParseJobTextRequest):
     """Extract structured job fields from a pasted job description."""
     if len(body.text) > get_settings().max_job_text_chars:
         raise HTTPException(status_code=413, detail="Job description is too long")
-    return _extract_job_or_http_error(body.text)
+    return _extract_job_cached(body.text)
 
 
 @router.post("/parse-link-llm", response_model=ParsedJob)
@@ -107,7 +129,7 @@ def parse_link_llm(body: ParseLinkRequest):
             detail="Content not accessible. Try /utils/parse-job-text-llm with pasted description.",
         )
 
-    return _extract_job_or_http_error(cleaned)
+    return _extract_job_cached(cleaned)
 
 
 @router.post("/parse-pdf", response_model=ParsedResume)

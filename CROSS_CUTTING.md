@@ -8,18 +8,19 @@ attributes that span **every** phase of the build.
 story?" or "what's our safety story?" in one place. When the two disagree, this doc
 defines the requirement and the ROADMAP schedules it.
 
-**Status legend:** ❌ none yet · 🟡 partial · ✅ done. This is an early prototype, so
-most of it is ❌ today — that's expected and honest.
+**Status legend:** ❌ none yet · 🟡 partial · ✅ done. All five concerns are delivered
+through Phase 7; each section keeps its pre-Phase-0 "starting point" so the distance
+traveled stays visible.
 
 ## At a glance
 
 | Concern | Today | Phases | Also see |
 |---|---|---|---|
-| 1. Security | ❌ | P1 (app), P6 (infra/CI) | `DEPLOYMENT.md` (secrets, network) |
-| 2. Privacy & Data Protection | ❌ | P1 (consent), P2 (retention/deletion), P4 (redaction ○), P5 (UI), P7 (policy) | `DEPLOYMENT.md` (residency) |
-| 3. Safety & Responsible AI | ❌ | P1 (input isolation), P3 (output guardrails), P4 (fairness evals), P5 (transparency), P7 (policy) | `ROADMAP.md` (evals) |
-| 4. Evals & Quality | ❌ | P0 (seed ○), P3 (feedback), P4 (full harness) | `ROADMAP.md` Phase 4 |
-| 5. Observability | ❌ | P0 (metrics hook), P4 (deepen), P6 (platform) | `ROADMAP.md` Phase 4 |
+| 1. Security | ✅ | P1 (app), P6 (infra/CI) | `DEPLOYMENT.md` (secrets, network) |
+| 2. Privacy & Data Protection | ✅ | P1 (consent), P2 (retention/deletion), P4 (redaction ○), P5 (UI), P7 (policy) | `PRIVACY.md` · `DEPLOYMENT.md` (residency) |
+| 3. Safety & Responsible AI | ✅ | P1 (input isolation), P3 (output guardrails), P4 (fairness evals), P5 (transparency), P7 (policy) | `RESPONSIBLE_AI.md` |
+| 4. Evals & Quality | ✅ | P0 (seed ○), P3 (feedback), P4 (full harness) | `ROADMAP.md` Phase 4 |
+| 5. Observability | ✅ | P0 (metrics hook), P4 (deepen), P6 (platform) | `ROADMAP.md` Phase 4 |
 
 ---
 
@@ -27,7 +28,7 @@ most of it is ❌ today — that's expected and honest.
 
 **Scope:** authn/authz, API abuse, secrets, network, dependencies.
 
-**Current state (❌):** no auth; `/agent/join-token` mints LiveKit tokens for anyone;
+**Starting point (pre-Phase 0, ❌):** no auth; `/agent/join-token` mints LiveKit tokens for anyone;
 CORS is `["*"]` + credentials; no rate limiting; exception text leaks to clients;
 API keys sit in a local `.env`.
 
@@ -48,7 +49,7 @@ Phase 6 (edge hardening, dependency scanning in CI). Infra/secrets: `DEPLOYMENT.
 **Scope:** you store **resumes (PII)** and **voice recordings (biometric in some
 jurisdictions)** — this is regulated data, not ordinary app content.
 
-**Current state (❌):** resumes/transcripts are sent to external APIs (Cerebras,
+**Starting point (pre-Phase 0, ❌):** resumes/transcripts are sent to external APIs (Cerebras,
 Deepgram) with no consent flow, no retention policy, no deletion path; analytics are
 an in-memory dict.
 
@@ -72,7 +73,7 @@ deletion UI), Phase 7 (policy, DPAs, residency).
 **Scope:** the AI-specific risks of an interview/hiring-adjacent product. This is the
 concern that was missing — it is **not** the same as Security.
 
-**Current state (❌):** untrusted JD/resume/transcript text is concatenated directly
+**Starting point (pre-Phase 0, ❌):** untrusted JD/resume/transcript text is concatenated directly
 into prompts; no guardrails; no fairness consideration; no moderation.
 
 **Requirements:**
@@ -102,7 +103,7 @@ intended-use docs, bias audits).
 **Scope:** measuring LLM output quality across the three surfaces (extraction,
 interviewer, feedback) + the voice layer.
 
-**Current state (❌):** no automated tests or evals; `test_*.py` are manual scripts.
+**Starting point (pre-Phase 0, ❌):** no automated tests or evals; `test_*.py` are manual scripts.
 
 **Requirements:** golden-set evals for extraction; scripted-scenario + LLM-judge evals
 for the interviewer; calibration + groundedness evals for feedback; voice SLOs (WER,
@@ -117,7 +118,7 @@ in `ROADMAP.md` Phase 4.
 
 **Scope:** logs, metrics, traces, cost — across API, LLM calls, and the voice pipeline.
 
-**Current state (❌):** ad-hoc `logging.basicConfig`; no metrics, traces, or cost tracking.
+**Starting point (pre-Phase 0, ❌):** ad-hoc `logging.basicConfig`; no metrics, traces, or cost tracking.
 
 **Requirements:** subscribe to the LiveKit `MetricsCollectedEvent` for per-turn latency
 (`ttft`/`ttfb`/EOU) and `UsageCollector` for per-interview cost; trace prompts/completions

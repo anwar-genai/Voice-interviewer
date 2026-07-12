@@ -42,7 +42,8 @@ export const InterviewRoom: React.FC = () => {
         ) : room.status === 'reconnecting' ? (
           <span className="status-badge status-ready">Reconnecting… <span className="timer">{fmt(elapsed)}</span></span>
         ) : room.status === 'disconnected' ? (
-          <span className="status-badge status-error">Disconnected</span>
+          // Also the normal end when the session time limit is reached — not an error.
+          <span className="status-badge status-ready">Interview ended</span>
         ) : (
           <span className="status-badge status-ready"><span className="loading-spinner" /> Connecting…</span>
         )}
@@ -60,7 +61,8 @@ export const InterviewRoom: React.FC = () => {
           {room.isMuted ? 'Unmute' : 'Mute'}
         </button>
         <button className="btn btn-danger" onClick={end} disabled={ending} aria-busy={ending}>
-          {ending ? <span className="loading-spinner" /> : null} End interview
+          {ending ? <span className="loading-spinner" /> : null}{' '}
+          {room.status === 'disconnected' ? 'Get my feedback' : 'End interview'}
         </button>
       </div>
 

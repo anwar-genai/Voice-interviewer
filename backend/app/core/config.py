@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     # --- Rate limiting (in-process; see app/core/ratelimit.py) -------------
     rate_limit_per_minute: int = 20
 
+    # --- Cost controls (Phase 7; enforced in /agent/join-token + the worker) --
+    # Interviews a user may start per UTC day. DB-backed (unlike the rate
+    # limiter), so it survives restarts and holds across machines.
+    daily_interview_limit: int = 10
+    # The agent wraps up and ends the session after this long. 0 disables.
+    max_interview_minutes: int = 30
+    # Global cap on simultaneously active interviews — bounds total provider
+    # spend and protects worker capacity.
+    max_concurrent_interviews: int = 10
+
     # --- LiveKit -----------------------------------------------------------
     livekit_url: str | None = None
     livekit_api_key: str | None = None

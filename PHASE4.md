@@ -99,6 +99,41 @@ new logging code.
 | Fairness suite has 5 names + 1 non-native sample | A small, hand-picked probe, not statistical coverage | Grow via `evals.export_prod` once there's real traffic to sample from |
 | Judge model is same-provider (Cerebras), different family | Shares infra failure modes (rate limits, outages) with the app | Point `EVAL_JUDGE_MODEL`-equivalent at an external provider if that shared blast radius matters |
 
+## Post-phase discussion: does Langfuse mean dockerizing the app?
+
+Came up after the phase landed, while deciding whether to close the
+`llm_trace`-instead-of-Langfuse gap: self-hosted Langfuse needs Docker (its
+own Postgres + web server containers). This repo has no Docker anywhere —
+the only place it's even planned is Phase 6 ("Dockerize three components").
+That raised the real question: does adopting Langfuse *now* mean pulling
+Phase 6's Docker work forward?
+
+**No.** Langfuse is just an HTTP sink at `LANGFUSE_BASE_URL`. The app doesn't
+care whether the thing on the other end of that URL is a container or
+`cloud.langfuse.com` — same SDK, same env vars either way. Self-hosting
+Langfuse via `docker compose up -d` in its own folder and continuing to run
+`uvicorn`, `python run_agent.py dev`, and `npm run dev` natively (venv/npm, no
+containers) is a completely ordinary setup — two unrelated processes on one
+machine, only one of which happens to be containers. Nothing couples them,
+and the Langfuse containers don't need to run continuously: bring them up
+when actively inspecting traces, `docker compose down` otherwise.
+
+Three options, in order of laziness, with the tradeoff that actually matters
+for this app:
+
+| Option | Docker? | Tradeoff |
+|---|---|---|
+| Langfuse Cloud | None | Real prompt tracing ships prompt/completion *content* off-machine — unlike today's metadata-only `llm_trace`. Fine for synthetic/test data; a real privacy question once actual candidate transcripts flow through it, given the redaction/data-minimization stance already in `CROSS_CUTTING.md`. |
+| Self-host, rest of the app stays native | Local only, on-demand | Keeps transcript data on the machine. Cost is Docker Desktop running + ~1-2GB of images + a few minutes on first pull (seconds after). |
+| Dockerize the whole app too | Full | This is just Phase 6 arriving early — an unrelated, bigger decision. If both happen, the compose files would naturally merge, but Langfuse doesn't require it. |
+
+**Where this landed:** still deferred, per the shortcuts table above — no
+code changed. Recorded here so the *decision*, not just the gap, survives:
+skip Docker for now (Cloud, only against synthetic data, if tracing is
+wanted before Phase 6), self-host specifically once real candidate
+transcripts are involved, or fold in naturally when Phase 6 dockerizes the
+app anyway.
+
 ## What to improve next (feeds Phase 5/6)
 
 - **Citation-level groundedness** — the semantic judge checks a strength has
@@ -106,7 +141,8 @@ new logging code.
 - **Fairness eval breadth** — more names, more transcripts, ideally sourced
   from real (redacted) interviews via `evals.export_prod` rather than one
   hand-written dataset.
-- **OTel wiring** — the SDK is already installed (a `livekit-agents` dependency);
-  actually exporting spans is Phase 6, once there's a collector to point at.
+- **OTel / Langfuse wiring** — the OTel SDK is already installed (a
+  `livekit-agents` dependency); actually exporting spans/traces is Phase 6,
+  once there's a collector (or a Langfuse instance, see above) to point at.
 - **App.tsx decomposition** — still one ~700-line component; the smoke test
   covers the shell, not the screens inside it — scheduled Phase 5 work.

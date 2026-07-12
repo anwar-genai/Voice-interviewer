@@ -12,7 +12,7 @@ psycopg[binary]>=3.2,<4
 PyJWT[crypto]>=2.9,<3
 
 # Voice + Agents (optional at runtime for LiveKit agent)
-livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.2
+livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.6
 livekit-plugins-noise-cancellation~=0.2
 cerebras-cloud-sdk>=1.2,<2
 

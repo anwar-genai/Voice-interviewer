@@ -62,14 +62,25 @@ def technical_keywords(context: InterviewContext, *, limit: int = 50) -> list[st
     no NLP. Catches FastAPI/PyPDF2/GDPR/C++; an LLM extraction pass if resumes
     prove too plain-cased for it.
     """
-    text = context.resume + " " + json.dumps(context.job)
     seen: dict[str, str] = {}
+
+    # The candidate's name (usually the resume's first line): boosting it stops
+    # the transcript calling them someone else ("Anwar" -> "Anurag").
+    first_line = next((ln.strip() for ln in context.resume.splitlines() if ln.strip()), "")
+    if len(first_line.split()) <= 5:
+        for token in first_line.split():
+            if token.isalpha() and token[0].isupper() and 2 <= len(token) <= 15:
+                seen.setdefault(token.lower(), token)
+
+    text = context.resume + " " + json.dumps(context.job)
     for token in _TECH_TOKEN_RE.findall(text):
         token = token.rstrip(".")
         if not 2 <= len(token) <= 30:
             continue
         if token.isupper():
-            ok = len(token) <= 6  # acronyms (SQL, GDPR); skips SHOUTING headers
+            # Pure-alpha 2-letter acronyms hijack common words ("AI" swallows
+            # "Hi"), so acronyms need 3+ letters; digit shorts (S3) stay.
+            ok = 3 <= len(token) <= 6 or any(c.isdigit() for c in token)
         else:
             ok = (
                 any(c.isupper() for c in token[1:])  # FastAPI, LangChain, PyTorch

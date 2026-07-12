@@ -26,9 +26,23 @@ def test_mines_technical_terms_from_resume_and_job() -> None:
 
 
 def test_skips_plain_words_and_shouting_headers() -> None:
-    ctx = InterviewContext(job={}, resume="EXPERIENCE working with teams and building software daily.")
+    ctx = InterviewContext(job={}, resume="summary\nEXPERIENCE working with teams and building software daily.")
     got = technical_keywords(ctx)
     assert got == [], f"plain prose should yield nothing, got {got}"
+
+
+def test_two_letter_acronyms_dropped_but_digit_shorts_kept() -> None:
+    # "AI" boosted at 1.5x hijacked "Hi" in a live interview; digit shorts stay.
+    ctx = InterviewContext(job={"qualifications": "AI, ML, S3, RAG, LLM"}, resume="skills first")
+    got = {k.lower() for k in technical_keywords(ctx)}
+    assert "ai" not in got and "ml" not in got, got
+    assert {"s3", "rag", "llm"} <= got, got
+
+
+def test_candidate_name_from_resume_first_line() -> None:
+    ctx = InterviewContext(job={}, resume="Anwar Khan\nSenior engineer working with software.")
+    got = {k.lower() for k in technical_keywords(ctx)}
+    assert {"anwar", "khan"} <= got, got
 
 
 def test_dedupes_and_caps() -> None:

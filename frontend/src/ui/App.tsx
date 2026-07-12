@@ -226,23 +226,19 @@ const InterviewApp: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
     setIsMuted(newMuted)
   }
 
-  async function endInterview() {
-    if (room) {
-      await room.disconnect()
-      setRoom(null)
-      setIsConnected(false)
-    }
-    // The agent persisted the turns as they happened; score them now.
+  async function scoreInterview(id: string) {
+    // Server-side scoring is idempotent, so retrying after a provider
+    // rate-limit failure is safe and never double-bills.
     setActiveStep('feedback')
     setFeedback(null)
     setError('')
     setLoading(true)
-    loadDetail(interviewId) // transcript + JD; independent of scoring
+    loadDetail(id) // transcript + JD; independent of scoring
     try {
       const res = await authedFetch('/feedback/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ interview_id: interviewId }),
+        body: JSON.stringify({ interview_id: id }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -254,6 +250,16 @@ const InterviewApp: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function endInterview() {
+    if (room) {
+      await room.disconnect()
+      setRoom(null)
+      setIsConnected(false)
+    }
+    // The agent persisted the turns as they happened; score them now.
+    await scoreInterview(interviewId)
   }
 
   async function loadDetail(id: string) {
@@ -568,6 +574,13 @@ const InterviewApp: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
               </div>
             )}
             {error && <div className="status-badge status-error">⚠️ {error}</div>}
+            {error && !loading && !feedback && detail && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <button className="btn btn-primary" onClick={() => scoreInterview(detail.id)}>
+                  🔁 Try scoring again
+                </button>
+              </div>
+            )}
 
             {feedback && (
               <>
@@ -640,6 +653,11 @@ const InterviewApp: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
                       {iv.overall_score != null && (
                         <button className="btn btn-secondary" onClick={() => viewFeedback(iv.id)}>
                           View feedback
+                        </button>
+                      )}
+                      {iv.overall_score == null && iv.status !== 'created' && (
+                        <button className="btn btn-secondary" onClick={() => scoreInterview(iv.id)}>
+                          Score
                         </button>
                       )}
                       <button className="btn btn-secondary" onClick={() => retakeInterview(iv.id)} disabled={loading}>

@@ -28,7 +28,7 @@ frontend/src/    Vite + React; ui/App.tsx is the main component, lib/supabase.ts
 
 Plan & rationale: `ROADMAP.md` (by phase), `CROSS_CUTTING.md` (by concern:
 security/privacy/safety/evals/o11y), `DEPLOYMENT.md` (how to ship).
-Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE3.md`.
+Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE5.md`.
 
 ## Status
 
@@ -48,7 +48,14 @@ Phase retros (challenges faced + improvements): `PHASE0.md`–`PHASE3.md`.
   scoring** (the fairness eval caught scores moving 2 points on the candidate's name
   alone); PII redaction, llm_trace logs, Sentry hook, provider-error events; CI with
   an eval gate on prompt changes) — branch `phase-4-quality`.
-- **Next:** Phase 5 (frontend maturity).
+- **Phase 5** (frontend maturity: decomposed the 380-line `App.tsx` into per-screen
+  components + a `useInterviewRoom` hook + an `InterviewProvider` context; React Router
+  (deep-linkable feedback/history, refresh-safe, nav hidden mid-interview); hand-written
+  API types (kills every `any`, no OpenAPI codegen); graceful mic-permission +
+  reconnection handling; self-serve data-deletion UI + AI-transparency; a11y + mobile;
+  component + api tests; **"On Air" visual redesign** — pine/amber identity with
+  waveform / VU-meter / score-ring canvas instruments) — branch `phase-5-frontend`.
+- **Next:** Phase 6 (deployment & DevOps).
 
 Work is phase-by-phase per `ROADMAP.md`, one commit per phase; non-phase fixes
 (like turn-detection) get their own branch off `main`.

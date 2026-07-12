@@ -33,10 +33,10 @@ export const Login: React.FC = () => {
 
   return (
     <div className="app-container">
-      <header className="app-header">
-        <h1 className="app-title">🎤 AI Interview Coach</h1>
-        <p className="app-subtitle">Sign in to practice your interview skills</p>
-      </header>
+      <div className="auth-hero">
+        <h1 className="auth-brand"><span className="brand-dot" aria-hidden="true" /> AI Interview Coach</h1>
+        <p className="auth-tagline">Sign in to practice your interview skills</p>
+      </div>
       <main className="main-content">
         <form className="auth-card" onSubmit={submit}>
           <div className="input-group">

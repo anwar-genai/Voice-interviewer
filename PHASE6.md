@@ -85,6 +85,47 @@ baked models); acceptable for a persistent worker, and slimming it (multi-stage
 build, API-only variant without the voice deps) is a known lever if image pull
 time ever matters.
 
+## Post-phase discussion: what the image is for, and daily workflow after Phase 6
+
+Questions that came up right after the phase landed, recorded so the answers
+survive.
+
+**Why build a Docker image at all?** Until now the backend only ran on one
+machine (venv + three terminals). A host like Fly can't use that — it needs a
+self-contained package: Python, every dependency, the code, frozen together.
+That's the image. One image serves both backend processes (API + worker —
+same code, same deps, different start command; `fly.toml` picks the command
+per process group). The local build was verification: a never-built
+Dockerfile is a guess, so it was built and a container from it had to answer
+`/health` before anything got committed.
+
+**Naming.** The local tag `voice-interviewer:phase6` is throwaway — it exists
+only to verify the build on this machine. The name that matters comes from
+`fly.toml`'s `app`: on deploy, Fly builds the same Dockerfile itself and
+stores the result as `registry.fly.io/voice-interviewer`. Images never enter
+git; the Dockerfile that produces them is what's committed.
+
+**What's ONNX and why does it keep coming up?** ONNX is a standard file
+format for trained ML models (a "PDF for neural networks") executed by
+`onnxruntime`, a CPU inference engine. Two models in this app ship as ONNX
+files and run *inside the worker*, next to the audio stream: the
+turn-detector (has the candidate finished their thought?) and Silero VAD
+(is this speech or fan noise?). They are why the worker gets 2GB RAM and a
+60s health-check grace (model load), why the image bakes ~100MB of model
+files, and — because ONNX runs fine on CPU — why nothing in this stack needs
+a GPU. The heavy AI stays with Cerebras/Deepgram over APIs; the ONNX models
+are the small latency-critical "ears" that can't be an API call away.
+
+**Docker or the three commands for daily dev?** The three commands, exactly
+as before (`uvicorn --reload`, `python run_agent.py dev`, `npm run dev`).
+The image is the shipping container, not the workshop: no hot reload (code
+is frozen at build; a one-line change means rebuilding 2GB), the container
+runs the worker in `start` (prod) mode rather than `dev`, the frontend isn't
+in the image at all, and the image deliberately reads no `.env`. Local Docker
+is for exactly two occasions: a one-off `docker build` after changing
+`requirements.txt`/`Dockerfile`, and reproducing a "works locally, breaks on
+Fly" discrepancy. Production is `git push` — Fly builds the image itself.
+
 ## What to improve next (feeds Phase 7)
 
 - **Actually deploy** — everything past `git push` is runbook: Fly app +

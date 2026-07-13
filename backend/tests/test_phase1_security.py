@@ -114,5 +114,29 @@ def test_prompt_injection_delimiters_are_stripped() -> None:
     assert user_turn.count("</interview_transcript>") == 1
 
 
+def test_ssrf_guard_blocks_internal_hosts() -> None:
+    from fastapi import HTTPException
+
+    from app.routers.utils import _require_public_url
+
+    # IP literals resolve to themselves (no DNS), so this stays offline.
+    for blocked in (
+        "http://169.254.169.254/latest/meta-data/",  # cloud metadata
+        "http://127.0.0.1/",  # loopback
+        "http://10.0.0.1/",  # private
+        "http://192.168.1.1/",  # private
+        "http://[::1]/",  # loopback v6
+    ):
+        try:
+            _require_public_url(blocked)
+        except HTTPException as exc:
+            assert exc.status_code == 400, (blocked, exc.status_code)
+        else:
+            raise AssertionError(f"SSRF guard let {blocked} through")
+
+    # A public IP literal must pass.
+    _require_public_url("http://8.8.8.8/")
+
+
 if __name__ == "__main__":
     raise SystemExit(_bootstrap.run_as_script(globals(), "security"))

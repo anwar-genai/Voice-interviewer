@@ -1,6 +1,9 @@
 import hashlib
 import io
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlparse
 
 import pdfplumber
 import requests
@@ -13,6 +16,32 @@ from ..core.ratelimit import rate_limit
 from ..llm import InvalidInputError, LLMError, ParsedJob, ParsedResume, extract_job
 
 logger = logging.getLogger("interview.utils")
+
+
+def _require_public_url(url: str) -> None:
+    """SSRF guard: reject URLs that resolve to non-public addresses.
+
+    These endpoints fetch a user-supplied URL server-side, so without this an
+    (authenticated) caller could reach cloud metadata (169.254.169.254),
+    localhost, or the internal network. We resolve every address the host maps
+    to and refuse private / loopback / link-local / reserved ranges.
+
+    ponytail: resolve-then-check has a TOCTOU/DNS-rebinding window (the name
+    could resolve differently when requests connects). Pin the connection to a
+    vetted IP only if that window ever matters; for authenticated, size-capped
+    fetches it doesn't yet.
+    """
+    host = urlparse(url).hostname
+    if not host:
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Could not resolve the URL host")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global or ip.is_reserved:
+            raise HTTPException(status_code=400, detail="URL host is not allowed")
 
 # rate_limit also authenticates, so every /utils endpoint is protected + throttled.
 router = APIRouter(prefix="/utils", tags=["utils"], dependencies=[Depends(rate_limit)])
@@ -29,6 +58,7 @@ class ParseJobTextRequest(BaseModel):
 def _fetch_bytes_capped(url: str, limit: int, *, expect_pdf: bool = False) -> tuple[bytes, str]:
     """Fetch a URL, refusing bodies larger than ``limit``. Returns (bytes, content_type)."""
     settings = get_settings()
+    _require_public_url(url)
     try:
         with requests.get(
             url,

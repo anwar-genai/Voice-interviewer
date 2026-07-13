@@ -1,4 +1,5 @@
 import React from 'react'
+import { WelcomeCard } from './WelcomeCard'
 import { JobInput } from './JobInput'
 import { ResumeUpload } from './ResumeUpload'
 import { ReadinessPanel } from './ReadinessPanel'
@@ -6,6 +7,7 @@ import { ReadinessPanel } from './ReadinessPanel'
 /** Route "/": assemble a job + resume, consent, and start. */
 export const SetupScreen: React.FC = () => (
   <>
+    <WelcomeCard />
     <div className="steps-container">
       <JobInput />
       <ResumeUpload />

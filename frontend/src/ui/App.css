@@ -123,6 +123,37 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; }
 .btn-lg { padding: .95rem 1.7rem; font-size: 1.05rem; border-radius: 10px; }
 .btn-start { margin-top: .25rem; }
 
+/* ---------- welcome / onboarding card ---------- */
+.welcome-card {
+  position: relative;
+  padding: 1.9rem 2.2rem 1.7rem;
+  border-bottom: 1px solid var(--line);
+  background: radial-gradient(130% 120% at 0% 0%, color-mix(in srgb, var(--pine) 9%, var(--surface)) 0%, var(--surface) 60%);
+}
+.welcome-close {
+  position: absolute; top: .9rem; right: 1rem;
+  width: 30px; height: 30px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); font-size: 1.2rem; line-height: 1; cursor: pointer;
+}
+.welcome-close:hover { border-color: var(--pine); color: var(--pine); }
+.welcome-title { font-size: 1.5rem; margin: 0 2rem .4rem 0; color: var(--pine-2); }
+.welcome-lede { color: var(--muted); margin: 0 0 1rem; max-width: 54ch; }
+.welcome-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: .35rem; color: var(--ink); }
+.welcome-steps strong { color: var(--pine); }
+.welcome-demo {
+  margin: 1.1rem 0 0; padding: .75rem .9rem;
+  display: flex; align-items: baseline; gap: .55rem;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line));
+  background: var(--amber-soft); border-radius: 10px;
+  font-size: .9rem; color: var(--ink);
+}
+.welcome-demo-dot {
+  flex: none; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--amber); transform: translateY(1px);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 26%, transparent);
+}
+
 /* ---------- setup: two columns + booth ---------- */
 .steps-container { display: grid; grid-template-columns: 1fr; }
 .step-section { padding: 1.9rem; border-bottom: 1px solid var(--line); }

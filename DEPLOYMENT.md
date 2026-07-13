@@ -121,6 +121,71 @@ fly machine run . --schedule daily "python -m app.db.retention"
 
 ---
 
+## Free tiers, commercial-use terms & the Cloudflare Pages escape hatch
+
+Two different kinds of "free" exist across this stack, and confusing them is how
+projects get surprised later:
+
+- **Usage-billed** (most of the stack): free until you cross a usage limit, then
+  you pay for usage. Nobody cares *why* you run the app. Monetizing changes nothing
+  except (eventually) your traffic.
+- **Intent-based ToS** (Vercel Hobby is the only one here): free tier is licensed
+  for **non-commercial use only**. The limit isn't traffic — it's whether the
+  project makes money (paid users, ads, run for a business). A portfolio/learning
+  project is fine indefinitely; the day it charges users, the Hobby plan stops
+  being allowed regardless of how little traffic it gets.
+
+### Per-provider posture
+
+Numbers drift — treat the *clause type* as the durable fact and re-check pricing
+pages before relying on a limit. As of mid-2026:
+
+| Provider | Free tier | Commercial use on free tier? | What actually triggers paying |
+|---|---|---|---|
+| **Vercel** (Hobby) | 100 GB bandwidth/mo, 200 projects | **No — ToS violation** | Monetizing at all → Pro ($20/user/mo), or migrate (below) |
+| **Cloudflare Pages** | Unlimited static bandwidth, 500 builds/mo | **Yes** | Essentially never for a static frontend |
+| **Fly.io** | None — usage-billed from day one | Yes | Always paying a little: this app's two machines ≈ $10–20/mo (API scales to zero; the worker runs 24/7 and is most of the bill) |
+| **Supabase** | 500 MB DB, 50k MAU auth | Yes | DB size / MAU growth → Pro ($25/mo). **Gotcha: free projects pause after ~1 week of inactivity** — fine while actively demoing, bad for a dormant portfolio link; Pro removes it |
+| **LiveKit Cloud** | Monthly participant-minutes quota | Yes | Interview volume (minutes) |
+| **Deepgram** | One-time signup credit | Yes | Credit runs out → per-minute STT / per-char TTS |
+| **Cerebras** | Rate-limited free tier | Yes | Token volume / rate limits → paid tier |
+| **Sentry** (Developer) | ~5k errors/mo, 1 user | Yes | Error volume / team size |
+| **GitHub Actions** | Unlimited minutes on public repos; 2 000 min/mo private | Yes | Private repo + heavy CI |
+
+Practical read for this project: as a portfolio app the only *recurring* bill is
+Fly (the always-on worker), everything else sits inside free tiers. If it ever
+monetizes, the checklist is: move the frontend off Vercel Hobby (or pay Pro) —
+nothing else in the stack changes for ToS reasons, only for volume.
+
+### Migration runbook: Vercel → Cloudflare Pages
+
+The frontend is static output (`npm run build` → `dist/`), so there is zero
+lock-in; this is ~15 minutes. Same repo, same build, new host:
+
+1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git**
+   → pick the repo.
+2. Build settings: framework preset **Vite** (or manual), root directory
+   **`frontend`**, build command **`npm run build`**, output **`dist`**.
+3. Environment variables (same three as Vercel):
+   `VITE_API_BASE`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
+4. Deploy → note the new domain (`https://<project>.pages.dev`).
+5. SPA routing: Pages needs a fallback so deep links like `/feedback/123` don't
+   404 on refresh — add `frontend/public/_redirects` containing exactly
+   `/* /index.html 200` (Vercel did this automatically; Pages needs the file).
+6. Re-point the two things that reference the frontend origin:
+   - `fly secrets set CORS_ORIGINS=https://<project>.pages.dev`
+   - Supabase → Authentication → URL Configuration: Site URL + Redirect URLs.
+7. Verify login + a full interview from the new domain, then delete the Vercel
+   project (or keep it as a staging mirror — but then keep BOTH origins in
+   `CORS_ORIGINS`, comma-separated).
+
+The same 7 steps generalize to any static host (Netlify, S3+CloudFront, Nginx):
+build `frontend/` → serve `dist/` → SPA fallback to `index.html` → set the three
+`VITE_` vars at build time (they're baked into the bundle, not read at runtime —
+rebuilding is how you change them) → update `CORS_ORIGINS` + Supabase URLs.
+
+---
+
 ## Component × platform matrix
 
 | Need | Self-host / OSS | AWS | Azure | GCP |
@@ -136,6 +201,33 @@ fly machine run . --schedule daily "python -m app.db.retention"
 | **LLM (in-boundary)** | vLLM / Ollama (GPU) | **Bedrock** (Claude, Llama) | **Azure OpenAI / AI Foundry** | **Vertex AI** (Gemini, Model Garden) |
 | **STT/TTS (native)** | Whisper / Piper / XTTS | Transcribe / Polly | Azure Speech | Speech-to-Text / Text-to-Speech |
 | **Observability** | Grafana + Prometheus + Loki + Tempo | CloudWatch + Managed Grafana + ADOT | Azure Monitor + App Insights | Cloud Operations Suite |
+
+---
+
+## Hyperscaler free tiers: don't expect them to cover this app
+
+All three require a card at signup (Azure even places a temporary ~$1 auth
+hold during verification — the same mechanic that can stall onboarding if the
+card has no available balance/credit). Trial credits ($100–300) expire in
+30–90 days regardless of usage. But the more important gap is structural, not
+about credits:
+
+| | What's actually free | Covers the 24/7 agent worker? |
+|---|---|---|
+| **AWS** | Fargate/ECS/App Runner have **no free tier at all** — billed per vCPU-second from hour one ($0.04048/vCPU-hr + $0.00444/GB-hr, ≈$65+/mo for this worker's size run continuously). The 12-months-free allowance is only a raw EC2 t2/t3.micro VM (750 hrs/mo) — free, but means hand-building Docker/systemd/health-checks yourself, not a managed deploy. **App Runner also stopped accepting new customers April 30, 2026** | Only via the DIY EC2-VM route, and even then the free instance (~1 vCPU/1GB) is thin for the VAD + turn-detector model |
+| **Azure Container Apps** | "Always free" grant: 180,000 vCPU-seconds/month ≈ **50 vCPU-hours** | A 24/7 process needs ~730 vCPU-hours/month — the grant covers **~2 days**, then meters for the rest, every month, forever |
+| **GCP Cloud Run** | Same-shaped grant (≈50 free vCPU-hours/month), and it's request-scoped by design | Same **~2 days/month**, plus architecturally the wrong fit regardless (see matrix above — GKE is needed instead, which has no equivalent free compute) |
+
+The pattern: every hyperscaler's free/always-free tier is sized for **bursty,
+scale-to-zero** workloads — which the stateless API actually is (it could run
+near-$0 indefinitely on any of these). The **agent worker is never idle by
+design** (it holds a live LiveKit connection 24/7), so it blows through the
+entire monthly free grant in the first couple of days and then meters
+uncapped for the rest — not "free for N months, then a flat fee" the way
+Render/Fly pricing works, but "free for ~2 days every month, forever." None
+of the three change this project's cost story versus Render/Fly; they only
+add IAM/VPC/orchestration overhead this project's stage doesn't need (see the
+"graduate to a hyperscaler when…" line above).
 
 ---
 

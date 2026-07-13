@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Run as non-root; the model cache below lands in /home/app/.cache.
 RUN useradd -m app
 COPY --chown=app:app . .
+RUN chmod +x start.sh
 USER app
 
 # Bake the turn-detector model into the image so worker cold-starts don't

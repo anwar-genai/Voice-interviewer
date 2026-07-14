@@ -2,14 +2,19 @@ import React, { useState } from 'react'
 import { api } from '../../lib/api'
 import { useInterview } from '../InterviewContext'
 
-/** Step 2: upload a PDF resume and extract its text. */
+/** Step 2: upload a PDF resume (click or drag-and-drop) and extract its text. */
 export const ResumeUpload: React.FC = () => {
   const { resume, setResume } = useInterview()
   const [fileName, setFileName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [dragging, setDragging] = useState(false)
 
   async function onPick(file: File) {
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Please choose a PDF file.')
+      return
+    }
     setFileName(file.name)
     setResume('')
     setError('')
@@ -23,6 +28,13 @@ export const ResumeUpload: React.FC = () => {
     }
   }
 
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) onPick(file)
+  }
+
   return (
     <div className="step-section">
       <div className="step-header">
@@ -32,7 +44,12 @@ export const ResumeUpload: React.FC = () => {
 
       <div className="input-group">
         <label className="input-label" htmlFor="resume-upload">Upload resume (PDF)</label>
-        <div className="file-upload">
+        <div
+          className={`file-upload ${dragging ? 'dragging' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+        >
           <input
             type="file"
             id="resume-upload"
@@ -43,7 +60,15 @@ export const ResumeUpload: React.FC = () => {
             }}
           />
           <label htmlFor="resume-upload" className={`file-upload-label ${fileName ? 'has-file' : ''}`}>
-            {fileName ? `📄 ${fileName}` : '📁 Choose PDF file'}
+            {fileName ? (
+              <span className="file-primary">📄 {fileName}</span>
+            ) : (
+              <>
+                <span className="file-icon" aria-hidden="true">⬆</span>
+                <span className="file-primary">Drag &amp; drop your résumé</span>
+                <span className="file-hint">or click to browse · PDF, up to 10&nbsp;MB</span>
+              </>
+            )}
           </label>
         </div>
         {loading && (

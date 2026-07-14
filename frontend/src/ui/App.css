@@ -273,11 +273,17 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; }
 .file-upload { position: relative; display: block; width: 100%; cursor: pointer; }
 .file-upload input[type=file] { position: absolute; left: -9999px; }
 .file-upload-label {
-  display: block; padding: 1.2rem; text-align: center; color: var(--muted); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem;
+  padding: 2rem 1.2rem; text-align: center; color: var(--muted); cursor: pointer;
   background: var(--surface); border: 1.5px dashed var(--line); border-radius: 12px; transition: all .2s;
 }
-.file-upload-label:hover { border-color: var(--pine); color: var(--pine); }
-.file-upload-label.has-file { border-style: solid; border-color: var(--good); background: color-mix(in srgb, var(--good) 7%, transparent); color: var(--ink); font-weight: 600; }
+.file-upload-label:hover { border-color: var(--pine); color: var(--pine); background: color-mix(in srgb, var(--pine) 4%, var(--surface)); }
+.file-upload.dragging .file-upload-label { border-color: var(--pine); border-style: solid; color: var(--pine); background: color-mix(in srgb, var(--pine) 9%, var(--surface)); }
+.file-icon { font-size: 1.6rem; line-height: 1; color: var(--pine); }
+.file-primary { font-weight: 650; color: var(--ink); }
+.file-hint { font-size: .82rem; color: var(--muted); }
+.file-upload-label.has-file { border-style: solid; border-color: var(--good); background: color-mix(in srgb, var(--good) 7%, transparent); }
+.file-upload-label.has-file .file-primary { color: var(--ink); }
 
 /* ---------- status badges + spinner ---------- */
 .status-badge { display: inline-flex; align-items: center; gap: .45rem; padding: .45rem .9rem; border-radius: 999px; font-size: .88rem; font-weight: 600; margin-top: .75rem; }

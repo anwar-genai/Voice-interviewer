@@ -240,6 +240,21 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; }
 }
 .step-title { font-size: 1.3rem; }
 
+/* role quick-pick pills (setup step 1) */
+.role-pills { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.1rem; }
+.role-pill {
+  font: inherit; font-size: .86rem; font-weight: 600; cursor: pointer;
+  padding: .4rem .85rem; border-radius: 999px;
+  color: var(--pine); background: color-mix(in srgb, var(--pine) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pine) 24%, var(--line));
+  transition: background .14s, border-color .14s, transform .12s, color .14s;
+}
+.role-pill:hover:not(:disabled) {
+  color: var(--on-pine); background: var(--pine);
+  border-color: var(--pine-2); transform: translateY(-1px);
+}
+.role-pill:disabled { opacity: .55; cursor: not-allowed; }
+
 .input-group { margin-bottom: 1.25rem; }
 .input-label { display: block; margin-bottom: .45rem; font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .input-field, .textarea-field {

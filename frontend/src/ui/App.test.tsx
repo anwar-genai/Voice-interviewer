@@ -24,12 +24,12 @@ import { App } from './App'
 it('shows the login gate when signed out', async () => {
   state.session = null
   render(<App />)
-  expect(await screen.findByText(/sign in to practice/i)).toBeTruthy()
+  expect(await screen.findByText(/no credit card/i)).toBeTruthy()
 })
 
 it('shows the interview app when signed in', async () => {
   state.session = { user: { id: 'u1' }, access_token: 't' }
   render(<App />)
   expect(await screen.findByText(/AI Interview Coach/i)).toBeTruthy()
-  expect(screen.queryByText(/sign in to practice/i)).toBeNull()
+  expect(screen.queryByText(/no credit card/i)).toBeNull()
 })

@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-/** Minimal email + password sign-in / sign-up gate. Phase 5 will flesh out the UX. */
+/** Landing + sign-in gate for logged-out visitors: a value-prop hero on the
+ *  left, a booth-style product preview on the right. */
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,48 +33,79 @@ export const Login: React.FC = () => {
   }
 
   return (
-    <div className="app-container">
-      <div className="auth-hero">
-        <h1 className="auth-brand"><span className="brand-dot" aria-hidden="true" /> AI Interview Coach</h1>
-        <p className="auth-tagline">Sign in to practice your interview skills</p>
+    <div className="landing">
+      <nav className="landing-nav" aria-label="Brand">
+        <span className="app-title"><span className="brand-dot" aria-hidden="true" /> AI Interview Coach</span>
+      </nav>
+
+      <div className="landing-grid">
+        <section className="landing-copy">
+          <span className="landing-eyebrow">Voice mock interviews</span>
+          <h1 className="landing-headline">Practice the interview <em>out loud</em>.</h1>
+          <p className="landing-lede">
+            A live AI interviewer talks with you by voice, adapts to the role and your
+            résumé, then scores your answers with specific, coaching-style feedback.
+          </p>
+
+          <form className="auth-card landing-auth" onSubmit={submit}>
+            <div className="input-group">
+              <label className="input-label">Email</label>
+              <input
+                type="email"
+                className="input-field"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="input-group">
+              <label className="input-label">Password</label>
+              <input
+                type="password"
+                className="input-field"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <button className="btn btn-primary btn-full btn-lg" type="submit" disabled={busy}>
+              {busy ? <span className="loading-spinner" /> : mode === 'signin' ? 'Sign in' : 'Start free →'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-full"
+              onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+            >
+              {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
+            </button>
+            {notice && <div className="status-badge status-ready">{notice}</div>}
+            {error && <div className="status-badge status-error">⚠️ {error}</div>}
+          </form>
+
+          <p className="landing-trust">No credit card. Your practice, your data — deletable anytime.</p>
+        </section>
+
+        <aside className="booth-preview" aria-hidden="true">
+          <div className="booth-top">
+            <span className="booth-onair"><span className="booth-onair-dot" /> ON AIR</span>
+            <span className="booth-timer">04:12</span>
+          </div>
+          <p className="booth-question">
+            “Tell me about a time you had to make a decision without complete information.”
+          </p>
+          <div className="booth-wave">
+            {Array.from({ length: 28 }).map((_, i) => (
+              <span key={i} className="booth-bar" style={{ animationDelay: `${(i % 7) * 0.09}s` }} />
+            ))}
+          </div>
+          <div className="booth-foot">
+            <span className="booth-mic" /> Listening…
+            <span className="booth-score">
+              <span className="booth-ring" /> 8.4
+            </span>
+          </div>
+        </aside>
       </div>
-      <main className="main-content">
-        <form className="auth-card" onSubmit={submit}>
-          <div className="input-group">
-            <label className="input-label">Email</label>
-            <input
-              type="email"
-              className="input-field"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="input-group">
-            <label className="input-label">Password</label>
-            <input
-              type="password"
-              className="input-field"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button className="btn btn-primary btn-full" type="submit" disabled={busy}>
-            {busy ? <span className="loading-spinner" /> : mode === 'signin' ? 'Sign in' : 'Create account'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-full"
-            onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-            style={{ marginTop: '0.5rem' }}
-          >
-            {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
-          </button>
-          {notice && <div className="status-badge status-ready">{notice}</div>}
-          {error && <div className="status-badge status-error">⚠️ {error}</div>}
-        </form>
-      </main>
     </div>
   )
 }

@@ -106,6 +106,20 @@ export const Login: React.FC = () => {
           </div>
         </aside>
       </div>
+
+      <section className="landing-how" aria-label="How it works">
+        {[
+          ['01', 'Add the role', 'Paste a job description — the interviewer adapts to it and your résumé.'],
+          ['02', 'Talk it through', 'A live voice interview, out loud, just like the real thing.'],
+          ['03', 'Get feedback', 'A scored report: strengths, gaps, and what to fix before the real one.'],
+        ].map(([n, title, detail]) => (
+          <div className="how-step" key={n}>
+            <span className="how-n">{n}</span>
+            <h3 className="how-t">{title}</h3>
+            <p className="how-d">{detail}</p>
+          </div>
+        ))}
+      </section>
     </div>
   )
 }

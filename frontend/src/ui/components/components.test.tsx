@@ -86,6 +86,26 @@ it('History shows score-appropriate actions per interview', async () => {
   expect(screen.getByText('Score')).toBeTruthy() // unscored but conducted → score
 })
 
+it('History charts score progress oldest-first, skipping unscored interviews', async () => {
+  // API returns newest first; the chart must re-sort ascending and drop the null.
+  api.listInterviews.mockResolvedValue([
+    { id: 'c', status: 'completed', job_title: 'Nurse', overall_score: null, created_at: '2026-07-12T10:00:00Z' },
+    { id: 'b', status: 'completed', job_title: 'Nurse', overall_score: 8, created_at: '2026-07-10T10:00:00Z' },
+    { id: 'a', status: 'completed', job_title: 'Nurse', overall_score: 5, created_at: '2026-07-01T10:00:00Z' },
+  ])
+  render(wrap(<History />))
+  expect(await screen.findByRole('img', { name: /oldest to newest: 5, 8 out of 10/ })).toBeTruthy()
+})
+
+it('History hides the trend chart with fewer than two scored interviews', async () => {
+  api.listInterviews.mockResolvedValue([
+    { id: 'a', status: 'completed', job_title: 'Nurse', overall_score: 8, created_at: '2026-07-12T10:00:00Z' },
+  ])
+  render(wrap(<History />))
+  expect(await screen.findByText('Nurse')).toBeTruthy()
+  expect(screen.queryByRole('img', { name: /oldest to newest/ })).toBeNull()
+})
+
 it('JobPreview keeps long fields collapsed until expanded', () => {
   render(<JobPreview job={{ job_title: 'Nurse', responsibilities: 'Triage patients and manage the ED floor.' }} />)
   expect(screen.getByText('Nurse')).toBeTruthy()

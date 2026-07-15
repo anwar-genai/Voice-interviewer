@@ -15,6 +15,57 @@ function seedFrom(id: string): number {
 const shortDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
+/** Overall score per scored interview, oldest → newest (last 10). Hidden until there are two. */
+const ScoreTrend: React.FC<{ interviews: InterviewSummary[] }> = ({ interviews }) => {
+  const scored = interviews
+    .filter((iv) => iv.overall_score != null)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .slice(-10)
+  if (scored.length < 2) return null
+
+  const W = 560, H = 130, padL = 26, padR = 34, padT = 14, padB = 22
+  const x = (i: number) => padL + (i * (W - padL - padR)) / (scored.length - 1)
+  const y = (v: number) => padT + (1 - v / 10) * (H - padT - padB)
+  const pts = scored.map((iv, i) => ({ cx: x(i), cy: y(iv.overall_score!), iv }))
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p.cx.toFixed(1)} ${p.cy.toFixed(1)}`).join(' ')
+
+  return (
+    <div className="trend">
+      <div className="trend-head">
+        <span className="take">Progress</span>
+        <span className="trend-sub">overall score · last {scored.length} scored</span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={`Overall scores, oldest to newest: ${scored.map((iv) => iv.overall_score).join(', ')} out of 10`}
+      >
+        {[0, 5, 10].map((v) => (
+          <g key={v}>
+            <line className="trend-grid" x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} />
+            <text className="trend-tick" x={padL - 7} y={y(v) + 3.5} textAnchor="end">{v}</text>
+          </g>
+        ))}
+        <path className="trend-line" d={line} />
+        {pts.map((p, i) => (
+          <g key={p.iv.id}>
+            <title>{`${shortDate(p.iv.created_at)} — ${p.iv.overall_score}/10${p.iv.job_title ? ` · ${p.iv.job_title}` : ''}`}</title>
+            <circle cx={p.cx} cy={p.cy} r={11} fill="transparent" />
+            <circle className="trend-dot" cx={p.cx} cy={p.cy} r={4} />
+            {i === pts.length - 1 && (
+              <text className="trend-last" x={p.cx + 10} y={p.cy + 3.5}>{p.iv.overall_score}</text>
+            )}
+          </g>
+        ))}
+        <text className="trend-tick" x={padL} y={H - 4}>{shortDate(scored[0].created_at)}</text>
+        <text className="trend-tick" x={W - padR} y={H - 4} textAnchor="end">
+          {shortDate(scored[scored.length - 1].created_at)}
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 /** Route "/history": the caller's past interviews as recording cards. */
 export const History: React.FC = () => {
   const navigate = useNavigate()
@@ -46,6 +97,8 @@ export const History: React.FC = () => {
         <div className="status-badge status-ready" role="status"><span className="loading-spinner" /> Loading…</div>
       )}
       {interviews?.length === 0 && <p className="ready-hint">No interviews yet. Start one to see it here.</p>}
+
+      {interviews && <ScoreTrend interviews={interviews} />}
 
       {interviews && interviews.length > 0 && (
         <div className="episodes">

@@ -25,6 +25,7 @@ it('shows the login gate when signed out', async () => {
   state.session = null
   render(<App />)
   expect(await screen.findByText(/no credit card/i)).toBeTruthy()
+  expect(screen.getByText(/talk it through/i)).toBeTruthy() // how-it-works strip lives here now
 })
 
 it('shows the interview app when signed in', async () => {

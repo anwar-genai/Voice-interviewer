@@ -142,10 +142,12 @@ async def entrypoint(ctx: JobContext) -> None:
         except Exception:  # session already closed (candidate left first) — nothing to end
             logger.debug("Time-limit teardown skipped for room=%s", ctx.room.name, exc_info=True)
 
-    if settings.max_interview_minutes > 0:
+    # Demo/guest rooms carry a shorter per-room cap in their metadata.
+    limit_minutes = context.max_minutes or settings.max_interview_minutes
+    if limit_minutes > 0:
         # The job process dies with the room, taking this task with it if the
         # interview ends early.
-        asyncio.create_task(_time_limit(settings.max_interview_minutes))
+        asyncio.create_task(_time_limit(limit_minutes))
 
     # Kick off the interview. generate_reply() speaks the result automatically;
     # after this the framework handles every subsequent user turn on its own.

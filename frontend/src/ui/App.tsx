@@ -32,19 +32,28 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/s/:token" element={<SharedReport />} />
-        <Route path="*" element={session ? <AuthedApp email={session.user?.email} /> : <Login />} />
+        <Route
+          path="*"
+          element={
+            session ? (
+              <AuthedApp email={session.user?.email} guest={Boolean(session.user?.is_anonymous)} />
+            ) : (
+              <Login />
+            )
+          }
+        />
       </Routes>
     </BrowserRouter>
   )
 }
 
-const AuthedApp: React.FC<{ email?: string }> = ({ email }) => (
+const AuthedApp: React.FC<{ email?: string; guest: boolean }> = ({ email, guest }) => (
   <InterviewProvider>
-    <Header onSignOut={() => supabase.auth.signOut()} email={email} />
+    <Header onSignOut={() => supabase.auth.signOut()} email={email} guest={guest} />
     <div className="app-container">
       <main className="main-content">
         <Routes>
-          <Route path="/" element={<SetupScreen />} />
+          <Route path="/" element={<SetupScreen guest={guest} />} />
           <Route path="/interview" element={<InterviewRoom />} />
           <Route path="/feedback/:id" element={<FeedbackReport />} />
           <Route path="/history" element={<History />} />
@@ -56,7 +65,7 @@ const AuthedApp: React.FC<{ email?: string }> = ({ email }) => (
   </InterviewProvider>
 )
 
-const Header: React.FC<{ onSignOut: () => void; email?: string }> = ({ onSignOut, email }) => {
+const Header: React.FC<{ onSignOut: () => void; email?: string; guest: boolean }> = ({ onSignOut, email, guest }) => {
   // Hide the whole nav during the live session — you shouldn't navigate away
   // (or sign out) mid-interview.
   const inInterview = useLocation().pathname === '/interview'
@@ -70,7 +79,7 @@ const Header: React.FC<{ onSignOut: () => void; email?: string }> = ({ onSignOut
           <nav className="app-nav" aria-label="Main">
             <NavLink to="/" end className="nav-link">New interview</NavLink>
             <NavLink to="/history" className="nav-link">History</NavLink>
-            <AccountMenu email={email} onSignOut={onSignOut} />
+            <AccountMenu email={email} guest={guest} onSignOut={onSignOut} />
           </nav>
         )}
       </div>
@@ -78,7 +87,7 @@ const Header: React.FC<{ onSignOut: () => void; email?: string }> = ({ onSignOut
   )
 }
 
-const AccountMenu: React.FC<{ email?: string; onSignOut: () => void }> = ({ email, onSignOut }) => {
+const AccountMenu: React.FC<{ email?: string; guest?: boolean; onSignOut: () => void }> = ({ email, guest, onSignOut }) => {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -98,16 +107,23 @@ const AccountMenu: React.FC<{ email?: string; onSignOut: () => void }> = ({ emai
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
-        title={email}
+        title={guest ? 'Guest session' : email}
         onClick={() => setOpen((v) => !v)}
       >
-        {(email?.[0] || '?').toUpperCase()}
+        {guest ? 'G' : (email?.[0] || '?').toUpperCase()}
       </button>
       {open && (
         <div className="menu-panel" role="menu">
-          {email && <div className="menu-email">{email}</div>}
+          {(guest || email) && <div className="menu-email">{guest ? 'Guest demo session' : email}</div>}
+          {guest && (
+            <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); onSignOut() }}>
+              Create a free account
+            </button>
+          )}
           <NavLink to="/settings" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>Privacy &amp; data</NavLink>
-          <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); onSignOut() }}>Sign out</button>
+          <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); onSignOut() }}>
+            {guest ? 'Exit demo' : 'Sign out'}
+          </button>
         </div>
       )}
     </div>

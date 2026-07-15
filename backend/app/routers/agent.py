@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..core.auth import require_claims
 from ..core.config import MissingConfigError, Settings, get_settings
 from ..core.ratelimit import rate_limit
 from ..db import get_db
@@ -31,7 +32,7 @@ class JoinTokenRequest(BaseModel):
     consent: bool = False
 
 
-def _enforce_cost_limits(db: Session, user_id: str, settings: Settings) -> None:
+def _enforce_cost_limits(db: Session, user_id: str, settings: Settings, daily_limit: int) -> None:
     """Cost controls (Phase 7): bound spend *before* a room or LLM call exists.
 
     Three COUNTs on the interviews table — DB-backed, so unlike the in-process
@@ -62,10 +63,10 @@ def _enforce_cost_limits(db: Session, user_id: str, settings: Settings) -> None:
         Interview.user_id == user_id,
         Interview.created_at >= now.replace(hour=0, minute=0, second=0, microsecond=0),
     )
-    if started_today >= settings.daily_interview_limit:
+    if started_today >= daily_limit:
         raise HTTPException(
             status_code=429,
-            detail=f"Daily interview limit reached ({settings.daily_interview_limit} per day) — try again tomorrow.",
+            detail=f"Daily interview limit reached ({daily_limit} per day) — try again tomorrow.",
         )
 
     if count(*active) >= settings.max_concurrent_interviews:
@@ -79,6 +80,7 @@ def _enforce_cost_limits(db: Session, user_id: str, settings: Settings) -> None:
 async def create_join_token(
     body: JoinTokenRequest,
     user_id: str = Depends(rate_limit),
+    claims: dict = Depends(require_claims),  # cached: same verification as rate_limit's
     db: Session = Depends(get_db),
 ):
     """Create the interview room, persist the interview, and mint a join token.
@@ -94,7 +96,12 @@ async def create_join_token(
         )
 
     settings = get_settings()
-    _enforce_cost_limits(db, user_id, settings)
+    # Anonymous (no-signup demo) users get one short interview per day. A guest
+    # can mint a fresh anonymous id by clearing storage, so the real backstops
+    # are the global concurrency cap plus the short per-session time limit.
+    # ponytail: IP-based throttling if demo abuse ever shows in the logs.
+    is_guest = bool(claims.get("is_anonymous"))
+    _enforce_cost_limits(db, user_id, settings, daily_limit=1 if is_guest else settings.daily_interview_limit)
 
     try:
         livekit_url, api_key, api_secret = settings.require_livekit()
@@ -111,7 +118,15 @@ async def create_join_token(
 
     # Pre-create the room with the job/resume in its metadata so the auto-dispatched
     # interview agent can personalize the session (it reads ctx.room.metadata on join).
-    metadata = json.dumps({"job": body.job or {}, "resume": resume, "user_id": user_id})
+    metadata = json.dumps(
+        {
+            "job": body.job or {},
+            "resume": resume,
+            "user_id": user_id,
+            # Per-room session cap; the worker falls back to MAX_INTERVIEW_MINUTES.
+            "max_minutes": settings.demo_interview_minutes if is_guest else None,
+        }
+    )
     try:
         async with lk_api.LiveKitAPI(livekit_url, api_key, api_secret) as lk:
             await lk.room.create_room(

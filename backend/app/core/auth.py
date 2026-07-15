@@ -44,14 +44,18 @@ def _unauthorized(detail: str) -> HTTPException:
     )
 
 
-def require_user(
+def require_claims(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> str:
-    """Return the authenticated user's id, or reject the request."""
+) -> dict:
+    """Return the verified token claims, or reject the request.
+
+    Most routes only need ``sub`` (use ``require_user``); the join-token route
+    also reads ``is_anonymous`` to apply tighter guest/demo limits.
+    """
     settings = get_settings()
 
     if not settings.auth_enabled:
-        return DEV_USER_ID
+        return {"sub": DEV_USER_ID}
 
     if creds is None:
         raise _unauthorized("Not authenticated")
@@ -80,7 +84,11 @@ def require_user(
         logger.info("Rejected token: %s", exc)
         raise _unauthorized("Invalid or expired token")
 
-    user_id = payload.get("sub")
-    if not user_id:
+    if not payload.get("sub"):
         raise _unauthorized("Malformed token")
-    return user_id
+    return payload
+
+
+def require_user(claims: dict = Depends(require_claims)) -> str:
+    """Return the authenticated user's id, or reject the request."""
+    return claims["sub"]

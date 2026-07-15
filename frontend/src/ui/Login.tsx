@@ -11,6 +11,20 @@ export const Login: React.FC = () => {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
 
+  async function tryDemo() {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      // Anonymous Supabase session: a real JWT, so the whole app works unchanged.
+      const { error } = await supabase.auth.signInAnonymously()
+      if (error) throw error
+    } catch (err: any) {
+      setError(err.message ?? 'Could not start the demo')
+      setBusy(false)
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
@@ -77,6 +91,9 @@ export const Login: React.FC = () => {
               onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
             >
               {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
+            </button>
+            <button type="button" className="btn btn-secondary btn-full" onClick={tryDemo} disabled={busy}>
+              Try a live demo — no signup
             </button>
             {notice && <div className="status-badge status-ready">{notice}</div>}
             {error && <div className="status-badge status-error">⚠️ {error}</div>}

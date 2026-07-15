@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   getInterview: vi.fn(),
   listInterviews: vi.fn(),
   joinToken: vi.fn(),
+  parseJobText: vi.fn(),
+  uploadResume: vi.fn(),
   shareInterview: vi.fn(),
   unshareInterview: vi.fn(),
   getSharedReport: vi.fn(),
@@ -22,6 +24,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../../lib/api', () => ({ api }))
 
 import { InterviewProvider } from '../InterviewContext'
+import { SetupScreen } from './SetupScreen'
 import { Settings } from './Settings'
 import { FeedbackReport } from './FeedbackReport'
 import { SharedReport } from './SharedReport'
@@ -142,6 +145,13 @@ it('SharedReport renders a public report from just a token', async () => {
   expect(await screen.findByText(/Backend Engineer/)).toBeTruthy()
   expect(screen.getByText('clear answers')).toBeTruthy()
   expect(api.getSharedReport).toHaveBeenCalledWith('tok123')
+})
+
+it('SetupScreen preloads a sample role and résumé for guests', async () => {
+  render(wrap(<SetupScreen guest />))
+  expect(await screen.findByText(/sample role & résumé are loaded/i)).toBeTruthy()
+  expect(screen.getByText('✅ Resume parsed')).toBeTruthy() // prefilled without any LLM call
+  expect(api.parseJobText).not.toHaveBeenCalled()
 })
 
 it('JobPreview keeps long fields collapsed until expanded', () => {

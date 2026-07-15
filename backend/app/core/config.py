@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # Global cap on simultaneously active interviews — bounds total provider
     # spend and protects worker capacity.
     max_concurrent_interviews: int = 10
+    # Session cap for anonymous (no-signup demo) users; guests also get 1
+    # interview per day instead of daily_interview_limit.
+    demo_interview_minutes: int = 5
 
     # --- LiveKit -----------------------------------------------------------
     livekit_url: str | None = None

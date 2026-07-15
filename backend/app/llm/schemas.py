@@ -39,3 +39,5 @@ class InterviewContext(BaseModel):
 
     job: dict[str, Any] = Field(default_factory=dict)
     resume: str = ""
+    # Per-room session cap (demo/guest interviews); None = the worker's global default.
+    max_minutes: int | None = None

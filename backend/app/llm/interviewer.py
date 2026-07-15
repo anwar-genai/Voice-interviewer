@@ -34,9 +34,11 @@ def parse_room_metadata(metadata: str | None) -> InterviewContext:
     if metadata:
         try:
             raw = json.loads(metadata)
+            minutes = raw.get("max_minutes")
             return InterviewContext(
                 job=raw.get("job") or DEFAULT_JOB,
                 resume=raw.get("resume") or DEFAULT_RESUME,
+                max_minutes=minutes if isinstance(minutes, int) and minutes > 0 else None,
             )
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             logger.warning("Failed to parse room metadata, using defaults: %s", exc)

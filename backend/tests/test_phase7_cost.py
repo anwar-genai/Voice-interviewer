@@ -37,12 +37,11 @@ client = TestClient(app)
 START = {"consent": True, "job": {"job_title": "Backend Engineer"}, "resume": "resume text"}
 
 
-def _auth(sub: str) -> dict[str, str]:
-    token = jwt.encode(
-        {"sub": sub, "aud": "authenticated", "exp": int(time.time()) + 3600},
-        _bootstrap.TEST_JWT_SECRET,
-        algorithm="HS256",
-    )
+def _auth(sub: str, *, anonymous: bool = False) -> dict[str, str]:
+    claims = {"sub": sub, "aud": "authenticated", "exp": int(time.time()) + 3600}
+    if anonymous:
+        claims["is_anonymous"] = True
+    token = jwt.encode(claims, _bootstrap.TEST_JWT_SECRET, algorithm="HS256")
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -107,6 +106,26 @@ def test_stale_active_rows_age_out(monkeypatch) -> None:
     _seed("p7-stale-user", status="in_progress", created_at=stale)
     r = client.post("/agent/join-token", json=START, headers=_auth("p7-stale-user"))
     assert r.status_code == 500, (r.status_code, r.text)  # past the gates, stopped by config only
+
+
+# --- anonymous (no-signup demo) guests -----------------------------------------
+
+def test_guest_gets_one_interview_per_day() -> None:
+    # DAILY_INTERVIEW_LIMIT=2 in tests, but anonymous users are capped at 1.
+    _seed("p7-guest-user")
+    r = client.post("/agent/join-token", json=START, headers=_auth("p7-guest-user", anonymous=True))
+    assert r.status_code == 429, (r.status_code, r.text)
+
+
+def test_guest_rooms_carry_demo_time_cap() -> None:
+    from app.llm import parse_room_metadata
+
+    ctx = parse_room_metadata('{"job": {}, "resume": "r", "max_minutes": 5}')
+    assert ctx.max_minutes == 5
+    # Regular rooms (None) and garbage values fall back to the global setting.
+    assert parse_room_metadata('{"job": {}, "resume": "r", "max_minutes": null}').max_minutes is None
+    assert parse_room_metadata('{"job": {}, "resume": "r", "max_minutes": -3}').max_minutes is None
+    assert parse_room_metadata('{"job": {}, "resume": "r", "max_minutes": "9"}').max_minutes is None
 
 
 # --- /utils extraction cache ---------------------------------------------------

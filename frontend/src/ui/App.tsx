@@ -30,8 +30,8 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <InterviewProvider>
+        <Header onSignOut={() => supabase.auth.signOut()} email={session.user?.email} />
         <div className="app-container">
-          <Header onSignOut={() => supabase.auth.signOut()} email={session.user?.email} />
           <main className="main-content">
             <Routes>
               <Route path="/" element={<SetupScreen />} />
@@ -54,16 +54,18 @@ const Header: React.FC<{ onSignOut: () => void; email?: string }> = ({ onSignOut
   const inInterview = useLocation().pathname === '/interview'
   return (
     <header className="app-header">
-      <NavLink to="/" className="app-title">
-        <span className="brand-dot" aria-hidden="true" /> AI Interview Coach
-      </NavLink>
-      {!inInterview && (
-        <nav className="app-nav" aria-label="Main">
-          <NavLink to="/" end className="btn btn-secondary">New</NavLink>
-          <NavLink to="/history" className="btn btn-secondary">History</NavLink>
-          <AccountMenu email={email} onSignOut={onSignOut} />
-        </nav>
-      )}
+      <div className="nav-inner">
+        <NavLink to="/" className="app-title">
+          <span className="brand-dot" aria-hidden="true" /> AI Interview Coach
+        </NavLink>
+        {!inInterview && (
+          <nav className="app-nav" aria-label="Main">
+            <NavLink to="/" end className="nav-link">New interview</NavLink>
+            <NavLink to="/history" className="nav-link">History</NavLink>
+            <AccountMenu email={email} onSignOut={onSignOut} />
+          </nav>
+        )}
+      </div>
     </header>
   )
 }

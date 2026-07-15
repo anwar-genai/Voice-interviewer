@@ -41,8 +41,8 @@ function paintWave(ctx: CanvasRenderingContext2D, w: number, h: number, rnd: () 
   const gap = w / bars
   const bw = Math.max(1.5, gap * thick)
   const g = ctx.createLinearGradient(0, 0, w, 0)
-  g.addColorStop(0, cssv('--pine'))
-  g.addColorStop(1, cssv('--amber'))
+  g.addColorStop(0, cssv('--accent'))
+  g.addColorStop(1, cssv('--warm'))
   ctx.fillStyle = g
   for (let i = 0; i < bars; i++) {
     const env = Math.sin((i / bars) * Math.PI) * 0.55 + 0.45
@@ -79,8 +79,8 @@ export const Waveform: React.FC<{ live?: boolean; height?: number; seed?: number
       const w = cv.clientWidth, h = cv.clientHeight, mid = h / 2, bars = 64
       ctx.clearRect(0, 0, w, h)
       const g = ctx.createLinearGradient(0, 0, w, 0)
-      g.addColorStop(0, cssv('--pine'))
-      g.addColorStop(1, cssv('--amber'))
+      g.addColorStop(0, cssv('--accent'))
+      g.addColorStop(1, cssv('--warm'))
       ctx.fillStyle = g
       const gap = w / bars, bw = Math.max(2, gap * 0.44)
       for (let i = 0; i < bars; i++) {
@@ -144,7 +144,7 @@ export const VuMeter: React.FC<{ value: number }> = ({ value }) => {
       ctx.strokeStyle = cssv('--line')
       ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.stroke()
       const g = ctx.createLinearGradient(cx - R, 0, cx + R, 0)
-      g.addColorStop(0, cssv('--pine')); g.addColorStop(1, cssv('--amber'))
+      g.addColorStop(0, cssv('--accent')); g.addColorStop(1, cssv('--warm'))
       ctx.strokeStyle = g
       ctx.beginPath(); ctx.arc(cx, cy, R, a0, aV); ctx.stroke()
       ctx.strokeStyle = cssv('--muted'); ctx.globalAlpha = 0.4; ctx.lineWidth = 1.5
@@ -178,7 +178,7 @@ export const ScoreRing: React.FC<{ value: number | null }> = ({ value }) => {
     )
   }
   const pct = Math.max(0, Math.min(10, value)) * 10
-  const stroke = value >= 7 ? 'var(--pine)' : value >= 4 ? 'var(--amber)' : 'var(--danger)'
+  const stroke = value >= 7 ? 'var(--accent)' : value >= 4 ? 'var(--warm)' : 'var(--danger)'
   return (
     <svg className="ring" viewBox="0 0 36 36" aria-hidden="true">
       <circle className="track" cx="18" cy="18" r="15.9" fill="none" strokeWidth="3" />

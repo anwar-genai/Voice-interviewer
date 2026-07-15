@@ -6,7 +6,7 @@ import type { Feedback, InterviewDetail, Job } from '../../lib/types'
 import { JobPreview } from './JobPreview'
 import { VuMeter } from './instruments'
 
-const TONE = { good: 'var(--good)', amber: 'var(--amber)', pine: 'var(--pine)' } as const
+const TONE = { good: 'var(--good)', warm: 'var(--warm)', accent: 'var(--accent)' } as const
 
 const FeedbackSection: React.FC<{ title: string; items: string[]; tone: keyof typeof TONE }> = ({ title, items, tone }) => {
   if (!items?.length) return null
@@ -94,8 +94,8 @@ export const FeedbackReport: React.FC = () => {
             <Score label="Communication" value={feedback.communication_score} />
           </div>
           <FeedbackSection title="Strengths" items={feedback.strengths} tone="good" />
-          <FeedbackSection title="Areas to improve" items={feedback.improvements} tone="amber" />
-          <FeedbackSection title="Recommendations" items={feedback.recommendations} tone="pine" />
+          <FeedbackSection title="Areas to improve" items={feedback.improvements} tone="warm" />
+          <FeedbackSection title="Recommendations" items={feedback.recommendations} tone="accent" />
         </>
       )}
 

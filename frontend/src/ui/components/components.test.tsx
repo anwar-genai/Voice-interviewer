@@ -15,12 +15,16 @@ const api = vi.hoisted(() => ({
   getInterview: vi.fn(),
   listInterviews: vi.fn(),
   joinToken: vi.fn(),
+  shareInterview: vi.fn(),
+  unshareInterview: vi.fn(),
+  getSharedReport: vi.fn(),
 }))
 vi.mock('../../lib/api', () => ({ api }))
 
 import { InterviewProvider } from '../InterviewContext'
 import { Settings } from './Settings'
 import { FeedbackReport } from './FeedbackReport'
+import { SharedReport } from './SharedReport'
 import { History } from './History'
 import { JobPreview } from './JobPreview'
 
@@ -104,6 +108,40 @@ it('History hides the trend chart with fewer than two scored interviews', async 
   render(wrap(<History />))
   expect(await screen.findByText('Nurse')).toBeTruthy()
   expect(screen.queryByRole('img', { name: /oldest to newest/ })).toBeNull()
+})
+
+it('FeedbackReport mints a share link on demand', async () => {
+  api.getFeedback.mockResolvedValue({
+    strengths: [], improvements: [], recommendations: [],
+    overall_score: 8, technical_score: 7, communication_score: 9,
+  })
+  api.getInterview.mockResolvedValue({ id: 'x', job: {}, resume: '', turns: [], share_token: null })
+  api.shareInterview.mockResolvedValue({ token: 'tok123' })
+
+  render(wrap(<Routes><Route path="/feedback/:id" element={<FeedbackReport />} /></Routes>, '/feedback/x'))
+
+  fireEvent.click(await screen.findByText('Share this report'))
+  expect(await screen.findByText(/\/s\/tok123/)).toBeTruthy()
+  expect(screen.getByText('Stop sharing')).toBeTruthy()
+  expect(api.shareInterview).toHaveBeenCalledWith('x')
+})
+
+it('SharedReport renders a public report from just a token', async () => {
+  api.getSharedReport.mockResolvedValue({
+    job_title: 'Backend Engineer', created_at: '2026-07-12T18:40:00Z',
+    feedback: {
+      strengths: ['clear answers'], improvements: [], recommendations: [],
+      overall_score: 8, technical_score: 7, communication_score: 9,
+    },
+  })
+  render(
+    <MemoryRouter initialEntries={['/s/tok123']}>
+      <Routes><Route path="/s/:token" element={<SharedReport />} /></Routes>
+    </MemoryRouter>,
+  )
+  expect(await screen.findByText(/Backend Engineer/)).toBeTruthy()
+  expect(screen.getByText('clear answers')).toBeTruthy()
+  expect(api.getSharedReport).toHaveBeenCalledWith('tok123')
 })
 
 it('JobPreview keeps long fields collapsed until expanded', () => {

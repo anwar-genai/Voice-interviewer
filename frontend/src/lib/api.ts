@@ -4,7 +4,7 @@
 // idempotent server-side, and a single user doesn't need React Query yet.
 // ponytail: plain fetch; add React Query in Phase 6/7 when there's real traffic.
 import { authedFetch } from './supabase'
-import type { Job, Feedback, InterviewSummary, InterviewDetail } from './types'
+import type { Job, Feedback, InterviewSummary, InterviewDetail, SharedReport } from './types'
 
 async function json<T>(resP: Promise<Response>, fallbackMsg: string): Promise<T> {
   const res = await resP
@@ -54,4 +54,14 @@ export const api = {
 
   deleteAllInterviews: () =>
     json<{ deleted: number }>(authedFetch('/interviews', { method: 'DELETE' }), 'Failed to delete your data'),
+
+  shareInterview: (id: string) =>
+    json<{ token: string }>(authedFetch(`/interviews/${id}/share`, { method: 'POST' }), 'Failed to create the share link'),
+
+  unshareInterview: (id: string) =>
+    json<{ shared: boolean }>(authedFetch(`/interviews/${id}/share`, { method: 'DELETE' }), 'Failed to stop sharing'),
+
+  // Public — works logged out; authedFetch just skips the header without a session.
+  getSharedReport: (token: string) =>
+    json<SharedReport>(authedFetch(`/share/${token}`), 'This shared report does not exist or was unshared.'),
 }

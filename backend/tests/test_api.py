@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app.llm.extraction as extraction  # noqa: E402
 import app.llm.feedback as llm_feedback  # noqa: E402
-from app.db.models import Interview, Turn  # noqa: E402
+from app.db.models import Feedback, Interview, Turn  # noqa: E402
 from app.db.session import session_scope  # noqa: E402
 from app.llm.errors import LLMError  # noqa: E402
 from app.main import app  # noqa: E402
@@ -160,6 +160,42 @@ def test_feedback_llm_error_is_generic_502(monkeypatch) -> None:
     r = client.post("/feedback/generate", json={"interview_id": iv_id}, headers=_auth("api-fb-err-user"))
     assert r.status_code == 502, (r.status_code, r.text)
     assert "secret internals" not in r.text
+
+
+def _score(iv_id: str) -> None:
+    with session_scope() as db:
+        db.add(Feedback(interview_id=iv_id, **FEEDBACK_JSON))
+
+
+def test_share_mint_public_read_revoke() -> None:
+    headers = _auth("api-share-user")
+    iv_id = _seed_interview("api-share-user", candidate_text=SUBSTANTIVE)
+    _score(iv_id)
+
+    token = client.post(f"/interviews/{iv_id}/share", headers=headers).json()["token"]
+    again = client.post(f"/interviews/{iv_id}/share", headers=headers).json()["token"]
+    assert token == again, "sharing twice must reuse the same token"
+
+    # Public read: no auth header, feedback only — no transcript/resume fields.
+    r = client.get(f"/share/{token}")
+    assert r.status_code == 200, (r.status_code, r.text)
+    body = r.json()
+    assert body["feedback"]["overall_score"] == FEEDBACK_JSON["overall_score"]
+    assert body["job_title"] == "Backend Engineer"
+    assert "resume" not in body and "turns" not in body
+
+    client.delete(f"/interviews/{iv_id}/share", headers=headers)
+    assert client.get(f"/share/{token}").status_code == 404, "revoked link must die"
+
+
+def test_share_requires_score_and_ownership() -> None:
+    iv_id = _seed_interview("api-share-owner", candidate_text=SUBSTANTIVE)
+    r = client.post(f"/interviews/{iv_id}/share", headers=_auth("api-share-owner"))
+    assert r.status_code == 400, "unscored interviews have nothing to share"
+
+    _score(iv_id)
+    r = client.post(f"/interviews/{iv_id}/share", headers=_auth("api-share-intruder"))
+    assert r.status_code == 404, "another user's interview must look nonexistent"
 
 
 if __name__ == "__main__":

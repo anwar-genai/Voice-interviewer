@@ -7,6 +7,7 @@ import { InterviewProvider } from './InterviewContext'
 import { SetupScreen } from './components/SetupScreen'
 import { InterviewRoom } from './components/InterviewRoom'
 import { FeedbackReport } from './components/FeedbackReport'
+import { SharedReport } from './components/SharedReport'
 import { History } from './components/History'
 import { Settings } from './components/Settings'
 import './App.css'
@@ -25,28 +26,35 @@ export const App: React.FC = () => {
   }, [])
 
   if (!authReady) return null
-  if (!session) return <Login />
 
+  // /s/:token is public (shared feedback reports); everything else sits behind auth.
   return (
     <BrowserRouter>
-      <InterviewProvider>
-        <Header onSignOut={() => supabase.auth.signOut()} email={session.user?.email} />
-        <div className="app-container">
-          <main className="main-content">
-            <Routes>
-              <Route path="/" element={<SetupScreen />} />
-              <Route path="/interview" element={<InterviewRoom />} />
-              <Route path="/feedback/:id" element={<FeedbackReport />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </main>
-        </div>
-      </InterviewProvider>
+      <Routes>
+        <Route path="/s/:token" element={<SharedReport />} />
+        <Route path="*" element={session ? <AuthedApp email={session.user?.email} /> : <Login />} />
+      </Routes>
     </BrowserRouter>
   )
 }
+
+const AuthedApp: React.FC<{ email?: string }> = ({ email }) => (
+  <InterviewProvider>
+    <Header onSignOut={() => supabase.auth.signOut()} email={email} />
+    <div className="app-container">
+      <main className="main-content">
+        <Routes>
+          <Route path="/" element={<SetupScreen />} />
+          <Route path="/interview" element={<InterviewRoom />} />
+          <Route path="/feedback/:id" element={<FeedbackReport />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+    </div>
+  </InterviewProvider>
+)
 
 const Header: React.FC<{ onSignOut: () => void; email?: string }> = ({ onSignOut, email }) => {
   // Hide the whole nav during the live session — you shouldn't navigate away

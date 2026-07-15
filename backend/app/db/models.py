@@ -33,6 +33,9 @@ class Interview(Base):
     job: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     resume: Mapped[str] = mapped_column(Text, default="")
 
+    # Public read-only share of the feedback report; None = not shared.
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
+
     consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

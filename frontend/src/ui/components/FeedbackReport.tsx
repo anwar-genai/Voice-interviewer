@@ -8,7 +8,7 @@ import { VuMeter } from './instruments'
 
 const TONE = { good: 'var(--good)', warm: 'var(--warm)', accent: 'var(--accent)' } as const
 
-const FeedbackSection: React.FC<{ title: string; items: string[]; tone: keyof typeof TONE }> = ({ title, items, tone }) => {
+export const FeedbackSection: React.FC<{ title: string; items: string[]; tone: keyof typeof TONE }> = ({ title, items, tone }) => {
   if (!items?.length) return null
   return (
     <div className="fb-section">
@@ -20,7 +20,7 @@ const FeedbackSection: React.FC<{ title: string; items: string[]; tone: keyof ty
   )
 }
 
-const Score: React.FC<{ label: string; value: number }> = ({ label, value }) => (
+export const Score: React.FC<{ label: string; value: number }> = ({ label, value }) => (
   <div className="vu-cell" aria-label={`${label} score ${value} out of 10`}>
     <VuMeter value={value} />
     <div className="k">{label}</div>
@@ -37,6 +37,36 @@ export const FeedbackReport: React.FC = () => {
   const [detail, setDetail] = useState<InterviewDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const shareUrl = shareToken ? `${window.location.origin}/s/${shareToken}` : ''
+
+  function copy(text: string) {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {}) // no clipboard (http/older browser): the visible URL is the fallback
+  }
+
+  async function share() {
+    try {
+      const { token } = await api.shareInterview(id)
+      setShareToken(token)
+      copy(`${window.location.origin}/s/${token}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create the share link')
+    }
+  }
+
+  async function unshare() {
+    try {
+      await api.unshareInterview(id)
+      setShareToken(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to stop sharing')
+    }
+  }
 
   async function loadFeedback(forceGenerate = false) {
     setError('')
@@ -58,7 +88,10 @@ export const FeedbackReport: React.FC = () => {
 
   useEffect(() => {
     setDetail(null)
-    api.getInterview(id).then(setDetail).catch(() => {}) // transcript/JD are nice-to-have
+    api.getInterview(id).then((d) => {
+      setDetail(d)
+      setShareToken(d.share_token)
+    }).catch(() => {}) // transcript/JD are nice-to-have
     loadFeedback()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -96,6 +129,23 @@ export const FeedbackReport: React.FC = () => {
           <FeedbackSection title="Strengths" items={feedback.strengths} tone="good" />
           <FeedbackSection title="Areas to improve" items={feedback.improvements} tone="warm" />
           <FeedbackSection title="Recommendations" items={feedback.recommendations} tone="accent" />
+
+          <div className="share-row">
+            {shareToken ? (
+              <>
+                <button className="btn btn-secondary" onClick={() => copy(shareUrl)}>
+                  {copied ? '✓ Copied' : 'Copy share link'}
+                </button>
+                <button className="btn btn-secondary" onClick={unshare}>Stop sharing</button>
+                <code className="share-url">{shareUrl}</code>
+                <p className="share-hint">
+                  Anyone with the link sees the scores and feedback — never your transcript or résumé.
+                </p>
+              </>
+            ) : (
+              <button className="btn btn-secondary" onClick={share}>Share this report</button>
+            )}
+          </div>
         </>
       )}
 

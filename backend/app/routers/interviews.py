@@ -7,6 +7,7 @@ filtered by ``user_id`` so one user can never see or delete another's data.
 from __future__ import annotations
 
 import logging
+import secrets
 from datetime import datetime
 from typing import Any
 
@@ -43,6 +44,7 @@ class InterviewDetail(InterviewSummary):
     job: dict[str, Any]
     resume: str
     turns: list[TurnOut]
+    share_token: str | None
 
 
 def _summary(iv: Interview) -> InterviewSummary:
@@ -110,7 +112,33 @@ def get_interview(
         job=iv.job or {},
         resume=iv.resume,
         turns=[TurnOut(role=t.role, content=t.content) for t in iv.turns],
+        share_token=iv.share_token,
     )
+
+
+@router.post("/{interview_id}/share")
+def share_interview(
+    interview_id: str, user_id: str = Depends(require_user), db: Session = Depends(get_db)
+):
+    """Mint (or return) the public share token for a scored interview."""
+    iv = owned_or_404(db, interview_id, user_id)
+    if iv.feedback is None:
+        raise HTTPException(status_code=400, detail="Score the interview before sharing it")
+    if iv.share_token is None:
+        iv.share_token = secrets.token_urlsafe(16)  # 128-bit, unguessable
+        db.commit()
+    return {"token": iv.share_token}
+
+
+@router.delete("/{interview_id}/share")
+def unshare_interview(
+    interview_id: str, user_id: str = Depends(require_user), db: Session = Depends(get_db)
+):
+    """Revoke the share link; the public URL 404s from now on."""
+    iv = owned_or_404(db, interview_id, user_id)
+    iv.share_token = None
+    db.commit()
+    return {"shared": False}
 
 
 @router.delete("/{interview_id}")

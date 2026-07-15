@@ -37,4 +37,12 @@ export type InterviewDetail = InterviewSummary & {
   job: Partial<Job>
   resume: string
   turns: Turn[]
+  share_token: string | null
+}
+
+/** Public share payload — feedback only, never the transcript or resume. */
+export type SharedReport = {
+  job_title: string | null
+  created_at: string
+  feedback: Feedback
 }

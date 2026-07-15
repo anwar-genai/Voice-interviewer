@@ -10,6 +10,7 @@ import { expect, it, vi, beforeEach } from 'vitest'
 // vi.hoisted runs before the hoisted vi.mock factory, so `api` is initialized in time.
 const api = vi.hoisted(() => ({
   deleteAllInterviews: vi.fn(),
+  deleteInterview: vi.fn(),
   getFeedback: vi.fn(),
   generateFeedback: vi.fn(),
   getInterview: vi.fn(),
@@ -22,6 +23,8 @@ const api = vi.hoisted(() => ({
   getSharedReport: vi.fn(),
 }))
 vi.mock('../../lib/api', () => ({ api }))
+// ReadinessPanel's guest-limit modal signs out via supabase directly.
+vi.mock('../../lib/supabase', () => ({ supabase: { auth: { signOut: vi.fn() } }, authedFetch: vi.fn() }))
 
 import { InterviewProvider } from '../InterviewContext'
 import { SetupScreen } from './SetupScreen'
@@ -152,6 +155,31 @@ it('SetupScreen preloads a sample role and résumé for guests', async () => {
   expect(await screen.findByText(/sample role & résumé are loaded/i)).toBeTruthy()
   expect(screen.getByText('✅ Resume parsed')).toBeTruthy() // prefilled without any LLM call
   expect(api.parseJobText).not.toHaveBeenCalled()
+})
+
+it('History lets a stuck active interview be discarded', async () => {
+  api.listInterviews.mockResolvedValue([
+    { id: 'stuck', status: 'in_progress', job_title: 'Nurse', overall_score: null, created_at: '2026-07-15T10:00:00Z' },
+  ])
+  api.deleteInterview.mockResolvedValue({ deleted: 1 })
+  render(wrap(<History />))
+
+  fireEvent.click(await screen.findByText('Discard'))
+  await waitFor(() => expect(api.deleteInterview).toHaveBeenCalledWith('stuck'))
+  expect(screen.queryByText('Nurse')).toBeNull()
+})
+
+it('guest sees a sign-up modal when the free demo is used up', async () => {
+  api.joinToken.mockRejectedValue(
+    new Error('Your free demo interview has been used — create a free account to keep practicing.'),
+  )
+  render(wrap(<SetupScreen guest />))
+
+  fireEvent.click(await screen.findByRole('checkbox')) // consent
+  fireEvent.click(screen.getByText(/start interview/i))
+
+  expect(await screen.findByText(/that was your free demo/i)).toBeTruthy()
+  expect(screen.getByText('Create a free account')).toBeTruthy()
 })
 
 it('JobPreview keeps long fields collapsed until expanded', () => {

@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     # Session cap for anonymous (no-signup demo) users; guests also get 1
     # interview per day instead of daily_interview_limit.
     demo_interview_minutes: int = 5
+    # Comma-separated emails exempt from the per-user quotas (owner/personal
+    # use). The global concurrency cap still applies.
+    unlimited_user_emails: str = ""
 
     # --- LiveKit -----------------------------------------------------------
     livekit_url: str | None = None
@@ -167,6 +170,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def unlimited_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.unlimited_user_emails.split(",") if e.strip()}
 
     def require_livekit(self) -> tuple[str, str, str]:
         """Return ``(url, api_key, api_secret)`` or raise."""

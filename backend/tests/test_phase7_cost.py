@@ -37,10 +37,12 @@ client = TestClient(app)
 START = {"consent": True, "job": {"job_title": "Backend Engineer"}, "resume": "resume text"}
 
 
-def _auth(sub: str, *, anonymous: bool = False) -> dict[str, str]:
+def _auth(sub: str, *, anonymous: bool = False, email: str | None = None) -> dict[str, str]:
     claims = {"sub": sub, "aud": "authenticated", "exp": int(time.time()) + 3600}
     if anonymous:
         claims["is_anonymous"] = True
+    if email:
+        claims["email"] = email
     token = jwt.encode(claims, _bootstrap.TEST_JWT_SECRET, algorithm="HS256")
     return {"Authorization": f"Bearer {token}"}
 
@@ -164,6 +166,20 @@ def test_guest_rooms_carry_demo_time_cap() -> None:
     assert parse_room_metadata('{"job": {}, "resume": "r", "max_minutes": null}').max_minutes is None
     assert parse_room_metadata('{"job": {}, "resume": "r", "max_minutes": -3}').max_minutes is None
     assert parse_room_metadata('{"job": {}, "resume": "r", "max_minutes": "9"}').max_minutes is None
+
+
+def test_unlimited_email_skips_per_user_quotas(monkeypatch) -> None:
+    # Owner allowlist: over daily quota AND has an active row, yet still passes.
+    monkeypatch.setattr(get_settings(), "livekit_url", None)
+    monkeypatch.setattr(get_settings(), "unlimited_user_emails", "Owner@Example.com")
+    _clear_active()
+    _seed("p7-owner-user")
+    _seed("p7-owner-user")
+    _seed("p7-owner-user", status="in_progress")
+    r = client.post(
+        "/agent/join-token", json=START, headers=_auth("p7-owner-user", email="owner@example.com")
+    )
+    assert r.status_code == 500, (r.status_code, r.text)  # past the gates, stopped by config only
 
 
 # --- /utils extraction cache ---------------------------------------------------

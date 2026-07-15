@@ -77,6 +77,18 @@ export const History: React.FC = () => {
     api.listInterviews().then(setInterviews).catch((e) => setError(e.message))
   }, [])
 
+  // A crashed worker / abandoned tab strands interviews as active, which then
+  // blocks the one-interview-at-a-time gate. Discard = self-serve unblock.
+  async function discard(id: string) {
+    setError('')
+    try {
+      await api.deleteInterview(id)
+      setInterviews((list) => (list ? list.filter((iv) => iv.id !== id) : list))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to discard that interview')
+    }
+  }
+
   async function retake(id: string) {
     setError('')
     try {
@@ -123,6 +135,11 @@ export const History: React.FC = () => {
                     <button className="btn btn-secondary" onClick={() => navigate(`/feedback/${iv.id}`)}>Score</button>
                   )}
                   <button className="btn btn-secondary" onClick={() => retake(iv.id)}>Retake</button>
+                  {(iv.status === 'created' || iv.status === 'in_progress') && (
+                    <button className="btn btn-secondary btn-discard" onClick={() => discard(iv.id)}>
+                      Discard
+                    </button>
+                  )}
                 </div>
               </div>
             )

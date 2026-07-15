@@ -55,6 +55,9 @@ export const api = {
   deleteAllInterviews: () =>
     json<{ deleted: number }>(authedFetch('/interviews', { method: 'DELETE' }), 'Failed to delete your data'),
 
+  deleteInterview: (id: string) =>
+    json<{ deleted: number }>(authedFetch(`/interviews/${id}`, { method: 'DELETE' }), 'Failed to discard that interview'),
+
   shareInterview: (id: string) =>
     json<{ token: string }>(authedFetch(`/interviews/${id}/share`, { method: 'POST' }), 'Failed to create the share link'),
 

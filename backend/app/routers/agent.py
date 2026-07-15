@@ -55,7 +55,9 @@ async def agent_status(db: Session = Depends(get_db)):
     return {"worker_online": _worker_online(db)}
 
 
-def _enforce_cost_limits(db: Session, user_id: str, settings: Settings, is_guest: bool) -> None:
+def _enforce_cost_limits(
+    db: Session, user_id: str, settings: Settings, is_guest: bool, exempt: bool = False
+) -> None:
     """Cost controls (Phase 7): bound spend *before* a room or LLM call exists.
 
     Three COUNTs on the interviews table — DB-backed, so unlike the in-process
@@ -77,12 +79,15 @@ def _enforce_cost_limits(db: Session, user_id: str, settings: Settings, is_guest
     def count(*where: Any) -> int:
         return db.scalar(select(func.count()).select_from(Interview).where(*where)) or 0
 
-    if count(Interview.user_id == user_id, *active):
+    if not exempt and count(Interview.user_id == user_id, *active):
         raise HTTPException(
-            status_code=409, detail="You already have an interview in progress — finish it first."
+            status_code=409,
+            detail="You already have an interview in progress — finish it first, or discard it from History.",
         )
 
-    if is_guest:
+    if exempt:
+        pass  # owner/personal use: no per-user quotas, global cap below still holds
+    elif is_guest:
         # One demo interview per anonymous identity, ever. Only interviews that
         # actually started count, so an attempt the worker never joined doesn't
         # burn the guest's single slot.
@@ -134,7 +139,9 @@ async def create_join_token(
     # are the global concurrency cap plus the short per-session time limit.
     # ponytail: IP-based throttling if demo abuse ever shows in the logs.
     is_guest = bool(claims.get("is_anonymous"))
-    _enforce_cost_limits(db, user_id, settings, is_guest=is_guest)
+    email = (claims.get("email") or "").lower()
+    exempt = bool(email) and email in settings.unlimited_email_set
+    _enforce_cost_limits(db, user_id, settings, is_guest=is_guest, exempt=exempt)
 
     # Never let a guest spend their one demo joining a room no interviewer will
     # ever enter (the worker runs on demand, not 24/7).

@@ -390,6 +390,8 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; }
 .ring text { font-family: var(--serif); font-weight: 600; fill: var(--ink); }
 .episode-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .episode-actions .btn { padding: .5rem .8rem; font-size: .86rem; text-decoration: none; }
+.btn-discard { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.btn-discard:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
 .chip { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 600; padding: .28rem .65rem; border-radius: 999px; }
 .chip-good { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
 .chip-amber { background: var(--warm-soft); color: var(--warm); }
@@ -405,6 +407,23 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; }
 .trend-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .trend-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .trend-last { font-size: 11px; font-weight: 600; fill: var(--ink); font-family: var(--serif); }
+
+/* ---------- modal (guest limit reached) ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.modal-card {
+  width: 100%; max-width: 420px; padding: 1.6rem 1.7rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: var(--shadow); text-align: left;
+}
+.modal-title { font-size: 1.3rem; margin-bottom: .5rem; }
+.modal-text { color: var(--muted); font-size: .95rem; margin-bottom: 1.2rem; }
+.modal-actions { display: flex; flex-direction: column; gap: .6rem; }
 
 /* ---------- share link ---------- */
 .share-row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-top: 1.6rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }

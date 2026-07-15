@@ -19,6 +19,9 @@ import asyncio
 import logging
 import os
 import sys
+import threading
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Ensure `app` package is importable when run from anywhere.
@@ -155,6 +158,32 @@ async def entrypoint(ctx: JobContext) -> None:
     await session.generate_reply(instructions=INTERVIEWER_GREETING_INSTRUCTIONS)
 
 
+HEARTBEAT_SECONDS = 30
+
+
+def _heartbeat_loop() -> None:
+    """Touch the single worker_heartbeat row so the API can tell visitors
+    whether a live interviewer is available (GET /agent/status)."""
+    from app.db.models import WorkerHeartbeat
+    from app.db.session import _session_factory
+
+    while True:
+        try:
+            db = _session_factory()()
+            try:
+                row = db.get(WorkerHeartbeat, 1)
+                if row is None:
+                    db.add(WorkerHeartbeat(id=1))
+                else:
+                    row.beat_at = datetime.now(timezone.utc)
+                db.commit()
+            finally:
+                db.close()
+        except Exception:  # DB hiccup: status just reads offline until the next beat
+            logger.debug("worker heartbeat write failed", exc_info=True)
+        time.sleep(HEARTBEAT_SECONDS)
+
+
 def main() -> None:
     configure_logging()
     init_error_reporting("agent-worker")
@@ -174,6 +203,9 @@ def main() -> None:
     os.environ.setdefault("LIVEKIT_API_SECRET", api_secret)
 
     logger.info("Starting agent worker against %s", livekit_url)
+
+    if settings.database_url:  # no DB (bare local run): status just reads offline
+        threading.Thread(target=_heartbeat_loop, daemon=True, name="worker-heartbeat").start()
 
     # No agent_name => automatic dispatch: the worker joins every new room.
     # initialize_process_timeout: the default 10s kills the worker on Windows

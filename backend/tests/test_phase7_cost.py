@@ -110,11 +110,49 @@ def test_stale_active_rows_age_out(monkeypatch) -> None:
 
 # --- anonymous (no-signup demo) guests -----------------------------------------
 
-def test_guest_gets_one_interview_per_day() -> None:
-    # DAILY_INTERVIEW_LIMIT=2 in tests, but anonymous users are capped at 1.
-    _seed("p7-guest-user")
+def _beat(minutes_ago: float = 0) -> None:
+    """Write/refresh the worker heartbeat row."""
+    from app.db.models import WorkerHeartbeat
+
+    with session_scope() as db:
+        row = db.get(WorkerHeartbeat, 1) or WorkerHeartbeat(id=1)
+        row.beat_at = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+        db.add(row)
+
+
+def test_guest_blocked_while_worker_offline() -> None:
+    _beat(minutes_ago=10)  # stale beat = offline
+    r = client.post("/agent/join-token", json=START, headers=_auth("p7-guest-cold", anonymous=True))
+    assert r.status_code == 503, (r.status_code, r.text)
+    assert "offline" in r.json()["detail"].lower()
+
+
+def test_agent_status_reflects_heartbeat() -> None:
+    assert client.get("/agent/status").json() == {"worker_online": False}  # stale from above
+    _beat()
+    assert client.get("/agent/status").json() == {"worker_online": True}
+
+
+def test_guest_gets_one_interview_for_life() -> None:
+    # DAILY_INTERVIEW_LIMIT=2 in tests; a guest's single started interview
+    # blocks forever, even days later.
+    _beat()  # worker online, so the quota (not the offline gate) must answer
+    old = datetime.now(timezone.utc) - timedelta(days=3)
+    _seed("p7-guest-user", created_at=old)  # status=completed -> started -> consumed
     r = client.post("/agent/join-token", json=START, headers=_auth("p7-guest-user", anonymous=True))
     assert r.status_code == 429, (r.status_code, r.text)
+    assert "demo" in r.json()["detail"].lower()
+
+
+def test_guest_unstarted_attempt_does_not_burn_the_slot(monkeypatch) -> None:
+    # A 'created' row (worker never joined) must not count as the guest's one demo.
+    monkeypatch.setattr(get_settings(), "livekit_url", None)
+    _clear_active()
+    _beat()
+    old = datetime.now(timezone.utc) - timedelta(days=1)
+    _seed("p7-guest-retry", status="created", created_at=old)
+    r = client.post("/agent/join-token", json=START, headers=_auth("p7-guest-retry", anonymous=True))
+    assert r.status_code == 500, (r.status_code, r.text)  # past the gates, stopped by config only
 
 
 def test_guest_rooms_carry_demo_time_cap() -> None:

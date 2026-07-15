@@ -1,5 +1,12 @@
-import React, { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import React, { useEffect, useState } from 'react'
+import { authedFetch, supabase } from '../lib/supabase'
+
+const DEMO_REQUEST_MAILTO =
+  'mailto:aannookhan@gmail.com?' +
+  new URLSearchParams({
+    subject: 'Live demo request — AI Interview Coach',
+    body: "Hi, I'd like to try the live demo. My preferred time: ",
+  }).toString().replace(/\+/g, '%20')
 
 /** Landing + sign-in gate for logged-out visitors: a value-prop hero on the
  *  left, a booth-style product preview on the right. */
@@ -10,6 +17,15 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  // null = still checking; drives which demo CTA renders.
+  const [workerOnline, setWorkerOnline] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    authedFetch('/agent/status')
+      .then((r) => r.json())
+      .then((d) => setWorkerOnline(Boolean(d.worker_online)))
+      .catch(() => setWorkerOnline(false))
+  }, [])
 
   async function tryDemo() {
     setBusy(true)
@@ -92,9 +108,21 @@ export const Login: React.FC = () => {
             >
               {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
             </button>
-            <button type="button" className="btn btn-secondary btn-full" onClick={tryDemo} disabled={busy}>
-              Try a live demo — no signup
-            </button>
+            {workerOnline === true && (
+              <button type="button" className="btn btn-secondary btn-full" onClick={tryDemo} disabled={busy}>
+                <span className="ready-dot" aria-hidden="true" /> Try a live demo — no signup
+              </button>
+            )}
+            {workerOnline === false && (
+              <>
+                <a className="btn btn-secondary btn-full" href={DEMO_REQUEST_MAILTO}>
+                  Request a live demo session
+                </a>
+                <p className="demo-status-hint">
+                  The live interviewer is offline right now — request a time and you&rsquo;ll get a link.
+                </p>
+              </>
+            )}
             {notice && <div className="status-badge status-ready">{notice}</div>}
             {error && <div className="status-badge status-error">⚠️ {error}</div>}
           </form>

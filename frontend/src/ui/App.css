@@ -121,6 +121,7 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; }
 }
 .landing-lede { color: var(--muted); font-size: 1.08rem; line-height: 1.6; margin: 0 0 1.6rem; }
 .landing-trust { margin-top: 1rem; font-size: .84rem; color: var(--muted); text-align: center; }
+.demo-status-hint { font-size: .8rem; color: var(--muted); text-align: center; margin: -.3rem 0 0; }
 
 /* sign-in / sign-up card — now inline in the hero, not centered full-page */
 .auth-card { padding: 1.6rem; display: flex; flex-direction: column; gap: .9rem; }

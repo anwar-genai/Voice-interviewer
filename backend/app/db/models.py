@@ -50,6 +50,20 @@ class Interview(Base):
     )
 
 
+class WorkerHeartbeat(Base):
+    """Single-row liveness beacon: the agent worker touches it every ~30s.
+
+    Lets the API (and therefore the landing page) know whether a live
+    interviewer is actually available — the worker may run anywhere with DB
+    access, so this beats trying to reach its local health port.
+    """
+
+    __tablename__ = "worker_heartbeat"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # always 1
+    beat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Turn(Base):
     __tablename__ = "turns"
 

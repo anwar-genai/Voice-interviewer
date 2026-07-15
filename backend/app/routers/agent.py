@@ -16,7 +16,7 @@ from ..core.auth import require_claims
 from ..core.config import MissingConfigError, Settings, get_settings
 from ..core.ratelimit import rate_limit
 from ..db import get_db
-from ..db.models import Interview
+from ..db.models import Interview, WorkerHeartbeat
 
 logger = logging.getLogger("interview.agent")
 
@@ -32,7 +32,30 @@ class JoinTokenRequest(BaseModel):
     consent: bool = False
 
 
-def _enforce_cost_limits(db: Session, user_id: str, settings: Settings, daily_limit: int) -> None:
+# The worker beats every 30s; three missed beats = offline.
+WORKER_ONLINE_WINDOW_SECONDS = 90
+
+
+def _worker_online(db: Session) -> bool:
+    row = db.get(WorkerHeartbeat, 1)
+    if row is None:
+        return False
+    beat = row.beat_at
+    if beat.tzinfo is None:  # SQLite (tests) stores naive UTC
+        beat = beat.replace(tzinfo=timezone.utc)
+    return beat >= datetime.now(timezone.utc) - timedelta(seconds=WORKER_ONLINE_WINDOW_SECONDS)
+
+
+@router.get("/status")
+async def agent_status(db: Session = Depends(get_db)):
+    """Public: is a live interviewer (agent worker) available right now?
+
+    The landing page uses this to offer the demo only when it can actually run.
+    """
+    return {"worker_online": _worker_online(db)}
+
+
+def _enforce_cost_limits(db: Session, user_id: str, settings: Settings, is_guest: bool) -> None:
     """Cost controls (Phase 7): bound spend *before* a room or LLM call exists.
 
     Three COUNTs on the interviews table — DB-backed, so unlike the in-process
@@ -59,15 +82,25 @@ def _enforce_cost_limits(db: Session, user_id: str, settings: Settings, daily_li
             status_code=409, detail="You already have an interview in progress — finish it first."
         )
 
-    started_today = count(
-        Interview.user_id == user_id,
-        Interview.created_at >= now.replace(hour=0, minute=0, second=0, microsecond=0),
-    )
-    if started_today >= daily_limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Daily interview limit reached ({daily_limit} per day) — try again tomorrow.",
+    if is_guest:
+        # One demo interview per anonymous identity, ever. Only interviews that
+        # actually started count, so an attempt the worker never joined doesn't
+        # burn the guest's single slot.
+        if count(Interview.user_id == user_id, Interview.status != "created"):
+            raise HTTPException(
+                status_code=429,
+                detail="Your free demo interview has been used — create a free account to keep practicing.",
+            )
+    else:
+        started_today = count(
+            Interview.user_id == user_id,
+            Interview.created_at >= now.replace(hour=0, minute=0, second=0, microsecond=0),
         )
+        if started_today >= settings.daily_interview_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Daily interview limit reached ({settings.daily_interview_limit} per day) — try again tomorrow.",
+            )
 
     if count(*active) >= settings.max_concurrent_interviews:
         raise HTTPException(
@@ -101,7 +134,15 @@ async def create_join_token(
     # are the global concurrency cap plus the short per-session time limit.
     # ponytail: IP-based throttling if demo abuse ever shows in the logs.
     is_guest = bool(claims.get("is_anonymous"))
-    _enforce_cost_limits(db, user_id, settings, daily_limit=1 if is_guest else settings.daily_interview_limit)
+    _enforce_cost_limits(db, user_id, settings, is_guest=is_guest)
+
+    # Never let a guest spend their one demo joining a room no interviewer will
+    # ever enter (the worker runs on demand, not 24/7).
+    if is_guest and not _worker_online(db):
+        raise HTTPException(
+            status_code=503,
+            detail="The live interviewer is offline right now — request a demo session and try again later.",
+        )
 
     try:
         livekit_url, api_key, api_secret = settings.require_livekit()
